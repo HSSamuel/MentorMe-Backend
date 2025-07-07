@@ -1,13 +1,19 @@
 import { Request, Response } from "express";
-import { PrismaClient, RequestStatus } from "@prisma/client";
+import { PrismaClient, RequestStatus, Role } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+// Define the shape of the user object attached by the auth middleware
+interface RequestUser {
+  userId: string;
+  role: Role;
+  email: string;
+}
+
+// Corrected helper function with an explicit type assertion
 const getUserIdForRequest = (req: Request): string | null => {
-  if (!req.user) return null;
-  if ("userId" in req.user) return req.user.userId as string;
-  if ("id" in req.user) return req.user.id as string;
-  return null;
+  const user = req.user as RequestUser;
+  return user?.userId || null;
 };
 
 export const createRequest = async (
@@ -60,7 +66,7 @@ export const getSentRequests = async (
   try {
     const requests = await prisma.mentorshipRequest.findMany({
       where: { menteeId },
-      include: { mentor: { select: { id: true, profile: true } } }, // included mentorId
+      include: { mentor: { select: { id: true, profile: true } } },
       orderBy: { createdAt: "desc" },
     });
     res.status(200).json(requests);
@@ -121,14 +127,12 @@ export const updateRequestStatus = async (
       data: { status: status as RequestStatus },
     });
 
-    // If the request was accepted, create a conversation
     if (status === "ACCEPTED") {
       await prisma.conversation.create({
         data: {
           participantIDs: [request.mentorId, request.menteeId],
         },
       });
-      // --- Create Notification for Mentee ---
       await prisma.notification.create({
         data: {
           userId: request.menteeId,
@@ -138,7 +142,6 @@ export const updateRequestStatus = async (
         },
       });
     } else if (status === "REJECTED") {
-      // --- Create Notification for Mentee ---
       await prisma.notification.create({
         data: {
           userId: request.menteeId,

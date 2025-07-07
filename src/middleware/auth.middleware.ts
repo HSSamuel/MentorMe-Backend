@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { Role } from "@prisma/client";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
 
@@ -30,7 +31,7 @@ export const authMiddleware = (
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as {
       userId: string;
-      role: string;
+      role: Role; // Correctly type 'role'
       email: string;
     };
     req.user = decoded; // This now matches our global type definition
