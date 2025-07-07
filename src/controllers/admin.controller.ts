@@ -42,29 +42,10 @@ export const getAllUsers = async (
   res: Response
 ): Promise<void> => {
   try {
-    // 1. Get page and limit from query params, with defaults
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-    const skip = (page - 1) * limit;
-
-    // 2. Fetch total count and the paginated users
-    const [users, totalCount] = await prisma.$transaction([
-      prisma.user.findMany({
-        skip: skip,
-        take: limit,
-        include: { profile: true },
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.user.count(),
-    ]);
-
-    // 3. Send paginated response
-    res.status(200).json({
-      users,
-      totalCount,
-      totalPages: Math.ceil(totalCount / limit),
-      currentPage: page,
+    const users = await prisma.user.findMany({
+      include: { profile: true },
     });
+    res.status(200).json(users);
   } catch (error) {
     res.status(500).json({ message: "Error fetching users." });
   }
