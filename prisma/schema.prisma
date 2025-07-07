@@ -1,0 +1,161 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+datasource db {
+  provider = "mongodb"
+  url      = env("MONGODB_URI")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String   @unique
+  password  String?
+  role      Role     @default(MENTEE)
+  createdAt DateTime @default(now())
+  profile   Profile?
+
+  // Fields for social login
+  googleId   String? @unique
+  facebookId String? @unique
+
+  // Fields for Google Calendar Integration
+  googleAccessToken   String?
+  googleRefreshToken  String?
+
+  // Relations
+  mentorshipsAsMentor MentorshipRequest[] @relation("MentorRequests")
+  mentorshipsAsMentee MentorshipRequest[] @relation("MenteeRequests")
+  sessionsAsMentor    Session[]           @relation("MentorSessions")
+  sessionsAsMentee    Session[]           @relation("MenteeSessions")
+  availability        Availability[]
+  notifications       Notification[]
+  
+  // Messaging Relations
+  conversations       Conversation[]      @relation(fields: [conversationIDs], references: [id])
+  conversationIDs     String[]            @db.ObjectId
+  sentMessages        Message[]           @relation("SentMessages")
+}
+
+model Profile {
+  id     String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId String   @unique @db.ObjectId
+  user   User     @relation(fields: [userId], references: [id])
+  name   String
+  bio    String?
+  skills String[]
+  goals  String?
+  avatarUrl String?
+}
+
+model MentorshipRequest {
+  id        String        @id @default(auto()) @map("_id") @db.ObjectId
+  mentorId  String        @db.ObjectId
+  menteeId  String        @db.ObjectId
+  status    RequestStatus @default(PENDING)
+  createdAt DateTime      @default(now())
+
+  mentor User @relation("MentorRequests", fields: [mentorId], references: [id])
+  mentee User @relation("MenteeRequests", fields: [menteeId], references: [id])
+  
+  // Relations
+  goals     Goal[]
+  reviews   Review[] // Relation to Reviews
+}
+
+model Session {
+  id       String   @id @default(auto()) @map("_id") @db.ObjectId
+  mentorId String   @db.ObjectId
+  menteeId String   @db.ObjectId
+  date     DateTime
+  rating   Int?
+  feedback String?
+
+  mentor User @relation("MentorSessions", fields: [mentorId], references: [id])
+  mentee User @relation("MenteeSessions", fields: [menteeId], references: [id])
+}
+
+model Availability {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  mentorId  String @db.ObjectId
+  mentor    User   @relation(fields: [mentorId], references: [id])
+  day       String
+  startTime String
+  endTime   String
+}
+
+model Conversation {
+    id          String    @id @default(auto()) @map("_id") @db.ObjectId
+    participants    User[]    @relation(fields: [participantIDs], references: [id])
+    participantIDs  String[]  @db.ObjectId
+    messages        Message[]
+    createdAt       DateTime  @default(now())
+    updatedAt       DateTime  @updatedAt
+}
+
+model Message {
+    id              String        @id @default(auto()) @map("_id") @db.ObjectId
+    conversationId  String        @db.ObjectId
+    conversation    Conversation  @relation(fields: [conversationId], references: [id])
+    senderId        String        @db.ObjectId
+    sender          User          @relation("SentMessages", fields: [senderId], references: [id])
+    content         String
+    createdAt       DateTime      @default(now())
+}
+
+model Goal {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  mentorshipRequestId String    @db.ObjectId
+  mentorshipRequest   MentorshipRequest @relation(fields: [mentorshipRequestId], references: [id])
+  title               String
+  description         String?
+  isCompleted         Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model Notification {
+  id          String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String            @db.ObjectId
+  user        User              @relation(fields: [userId], references: [id])
+  type        NotificationType
+  message     String
+  link        String?
+  isRead      Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+}
+
+// New Model for Reviews
+model Review {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  mentorshipRequestId String    @db.ObjectId
+  mentorshipRequest   MentorshipRequest @relation(fields: [mentorshipRequestId], references: [id])
+  rating              Int       // Rating from 1 to 5
+  comment             String?
+  createdAt           DateTime  @default(now())
+}
+
+
+enum Role {
+  MENTEE
+  MENTOR
+  ADMIN
+}
+
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum NotificationType {
+  NEW_MENTORSHIP_REQUEST
+  MENTORSHIP_REQUEST_ACCEPTED
+  MENTORSHIP_REQUEST_REJECTED
+  NEW_MESSAGE
+  SESSION_BOOKED
+  SESSION_REMINDER
+}
