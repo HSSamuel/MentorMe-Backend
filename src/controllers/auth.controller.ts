@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import zxcvbn from "zxcvbn";
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
@@ -16,6 +17,16 @@ const getUserId = (req: Request): string | null => {
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   const { email, password, role } = req.body;
+
+  const passwordStrength = zxcvbn(password);
+  if (passwordStrength.score < 3) {
+    res.status(400).json({
+      message: "Password is too weak. Please choose a stronger password.",
+      suggestions: passwordStrength.feedback.suggestions,
+    });
+    return;
+  }
+
   try {
     const hashedPassword = await bcrypt.hash(password, 12);
 

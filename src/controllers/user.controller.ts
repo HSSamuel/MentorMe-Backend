@@ -1,16 +1,8 @@
 import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
+import { getUserId } from "../utils/getUserId"; // This line was missing
 
 const prisma = new PrismaClient();
-
-// Corrected helper function with a type assertion to resolve the error.
-const getUserIdFromRequest = (req: Request): string | null => {
-  // We use a type assertion here to tell TypeScript the exact shape of our user object.
-  if (req.user && "userId" in req.user) {
-    return (req.user as { userId: string }).userId;
-  }
-  return null;
-};
 
 // GET a single mentor's public profile
 export const getMentorPublicProfile = async (
@@ -95,7 +87,7 @@ export const updateMyProfile = async (
   req: Request,
   res: Response
 ): Promise<void> => {
-  const userId = getUserIdFromRequest(req);
+  const userId = getUserId(req);
   if (!userId) {
     res.status(401).json({ message: "Authentication error" });
     return;
@@ -139,7 +131,7 @@ export const getMentorStats = async (
   req: Request,
   res: Response
 ): Promise<void> => {
-  const userId = getUserIdFromRequest(req);
+  const userId = getUserId(req);
   if (!userId) {
     res.status(401).json({ message: "Authentication error" });
     return;
@@ -154,7 +146,25 @@ export const getMentorStats = async (
     const upcomingSessions = await prisma.session.count({
       where: { mentorId: userId, date: { gte: new Date() } },
     });
-    res.status(200).json({ menteeCount, pendingRequests, upcomingSessions });
+    const completedSessions = await prisma.session.count({
+      where: { mentorId: userId, date: { lt: new Date() } },
+    });
+    const reviews = await prisma.review.findMany({
+      where: { mentorshipRequest: { mentorId: userId } },
+      select: { rating: true },
+    });
+    const averageRating =
+      reviews.length > 0
+        ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length
+        : 0;
+
+    res.status(200).json({
+      menteeCount,
+      pendingRequests,
+      upcomingSessions,
+      completedSessions,
+      averageRating,
+    });
   } catch (error) {
     res.status(500).json({ message: "Error fetching mentor stats." });
   }
@@ -165,7 +175,7 @@ export const getMenteeStats = async (
   req: Request,
   res: Response
 ): Promise<void> => {
-  const userId = getUserIdFromRequest(req);
+  const userId = getUserId(req);
   if (!userId) {
     res.status(401).json({ message: "Authentication error" });
     return;
@@ -180,7 +190,15 @@ export const getMenteeStats = async (
     const upcomingSessions = await prisma.session.count({
       where: { menteeId: userId, date: { gte: new Date() } },
     });
-    res.status(200).json({ mentorCount, pendingRequests, upcomingSessions });
+    const completedSessions = await prisma.session.count({
+      where: { menteeId: userId, date: { lt: new Date() } },
+    });
+    res.status(200).json({
+      mentorCount,
+      pendingRequests,
+      upcomingSessions,
+      completedSessions,
+    });
   } catch (error) {
     res.status(500).json({ message: "Error fetching mentee stats." });
   }

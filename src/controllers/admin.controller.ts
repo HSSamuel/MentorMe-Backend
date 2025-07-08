@@ -121,12 +121,18 @@ export const assignMentor = async (
 export const getStats = async (req: Request, res: Response): Promise<void> => {
   try {
     const totalUsers = await prisma.user.count();
+    const totalMentors = await prisma.user.count({ where: { role: 'MENTOR' } });
+    const totalMentees = await prisma.user.count({ where: { role: 'MENTEE' } });
     const totalMatches = await prisma.mentorshipRequest.count({
       where: { status: "ACCEPTED" },
     });
     const totalSessions = await prisma.session.count();
+    const pendingRequests = await prisma.mentorshipRequest.count({
+        where: { status: "PENDING" },
+    });
 
-    res.status(200).json({ totalUsers, totalMatches, totalSessions });
+
+    res.status(200).json({ totalUsers, totalMentors, totalMentees, totalMatches, totalSessions, pendingRequests });
   } catch (error) {
     res.status(500).json({ message: "Error fetching admin stats." });
   }

@@ -8,6 +8,7 @@ import passport from "passport";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import path from "path";
+import rateLimit from "express-rate-limit";
 
 // Import all route handlers
 import authRoutes from "./routes/auth.routes";
@@ -50,8 +51,16 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Rate limiting
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // API Routes
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/requests", requestRoutes);
 app.use("/api/admin", adminRoutes);

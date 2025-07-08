@@ -20,11 +20,11 @@ router.put(
   authMiddleware,
   upload.single("avatar"), // Use multer middleware here
   [
-    body("name").notEmpty().withMessage("Name is required"),
-    body("bio").notEmpty().withMessage("Bio is required"),
+    body("name").notEmpty().withMessage("Name is required").trim().escape(),
+    body("bio").notEmpty().withMessage("Bio is required").trim().escape(),
     // Skills are now optional in the validation
     body("skills").optional().isArray().withMessage("Skills must be an array"),
-    body("goals").notEmpty().withMessage("Goals are required"),
+    body("goals").notEmpty().withMessage("Goals are required").trim().escape(),
   ],
   validateRequest,
   updateMyProfile
