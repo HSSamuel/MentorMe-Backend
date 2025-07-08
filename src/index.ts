@@ -1,4 +1,3 @@
-// src/index.ts
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -21,23 +20,21 @@ import goalRoutes from "./routes/goal.routes";
 import messageRoutes from "./routes/message.routes";
 import notificationRoutes from "./routes/notification.routes";
 import calendarRoutes from "./routes/calendar.routes";
-import aiRoutes from "./routes/ai.routes"; // Import the new AI routes
+import aiRoutes from "./routes/ai.routes";
 
-// Import passport config and socket service
 import "./config/passport";
 import { initializeSocket } from "./services/socket.service";
 import { jsonErrorHandler } from "./middleware/error.middleware";
+import "./jobs/reminder.cron";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGODB_URI;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "../public/uploads")));
 
-// Session Middleware
 app.use(
   session({
     secret: process.env.JWT_SECRET || "a-default-session-secret",
@@ -47,19 +44,16 @@ app.use(
   })
 );
 
-// Passport Middleware
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Rate limiting
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// API Routes
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/requests", requestRoutes);
@@ -70,25 +64,24 @@ app.use("/api/goals", goalRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/calendar", calendarRoutes);
-app.use("/api/ai", aiRoutes); // Use the new AI routes
+app.use("/api/ai", aiRoutes);
 
-// --- Global Error Handler ---
-// This middleware MUST be placed after all other app.use() calls.
 app.use(jsonErrorHandler);
 
-// Create HTTP server and Socket.IO instance
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
+  // REMOVED the 'export' keyword from here
   cors: {
     origin: process.env.FRONTEND_URL || "http://localhost:3000",
     methods: ["GET", "POST"],
   },
 });
 
-// Initialize Socket.IO logic
+// Make the io instance available to all routes via app.locals
+app.locals.io = io;
+
 initializeSocket(io);
 
-// Connect to MongoDB and Then Start Server
 const startServer = async () => {
   if (!MONGO_URI) {
     console.error("🔴 MONGO_URI is not defined in .env file");

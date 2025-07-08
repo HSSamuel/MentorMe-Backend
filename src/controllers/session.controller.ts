@@ -1,15 +1,9 @@
 import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
 import { createCalendarEvent } from "../services/calendar.service";
+import { getUserId } from "../utils/getUserId";
 
 const prisma = new PrismaClient();
-
-const getUserIdForSession = (req: Request): string | null => {
-  if (!req.user) return null;
-  if ("userId" in req.user) return req.user.userId as string;
-  if ("id" in req.user) return req.user.id as string;
-  return null;
-};
 
 const getUserRole = (req: Request): string | null => {
   if (!req.user) return null;
@@ -20,7 +14,9 @@ export const setAvailability = async (
   req: Request,
   res: Response
 ): Promise<void> => {
-  const mentorId = getUserIdForSession(req);
+  const mentorId = getUserId(req);
+  const io = req.app.locals.io; // This is the correct way to access io
+
   if (!mentorId) {
     res.status(401).json({ message: "Authentication error" });
     return;
@@ -28,13 +24,23 @@ export const setAvailability = async (
   const { availability } = req.body;
   try {
     await prisma.availability.deleteMany({ where: { mentorId } });
+
     const availabilityData = availability.map((slot: any) => ({
-      ...slot,
       mentorId,
+      day: slot.day,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
     }));
-    await prisma.availability.createMany({ data: availabilityData });
+
+    if (availabilityData.length > 0) {
+      await prisma.availability.createMany({ data: availabilityData });
+    }
+
+    io.emit("availabilityUpdated", { mentorId });
+
     res.status(200).json({ message: "Availability updated successfully." });
   } catch (error) {
+    console.error("Error setting availability:", error);
     res.status(500).json({ message: "Error setting availability." });
   }
 };
@@ -43,7 +49,7 @@ export const createSession = async (
   req: Request,
   res: Response
 ): Promise<void> => {
-  const menteeId = getUserIdForSession(req);
+  const menteeId = getUserId(req);
   if (!menteeId) {
     res.status(401).json({ message: "Authentication error" });
     return;
@@ -68,7 +74,6 @@ export const createSession = async (
       include: { profile: true },
     });
 
-    // --- Create Notification for Mentor ---
     await prisma.notification.create({
       data: {
         userId: mentorId,
@@ -80,7 +85,6 @@ export const createSession = async (
       },
     });
 
-    // Google Calendar Event Creation
     try {
       const mentor = await prisma.user.findUnique({ where: { id: mentorId } });
       if (mentor && mentee) {
@@ -89,7 +93,7 @@ export const createSession = async (
           description:
             "Your mentorship session booked via the MentorMe Platform.",
           start: new Date(sessionTime),
-          end: new Date(new Date(sessionTime).getTime() + 60 * 60 * 1000), // Assume 1-hour session
+          end: new Date(new Date(sessionTime).getTime() + 60 * 60 * 1000),
           attendees: [mentor.email, mentee.email],
         };
         if (mentor.googleRefreshToken)
@@ -111,7 +115,7 @@ export const getMentorSessions = async (
   req: Request,
   res: Response
 ): Promise<void> => {
-  const mentorId = getUserIdForSession(req);
+  const mentorId = getUserId(req);
   if (!mentorId) {
     res.status(401).json({ message: "Authentication error" });
     return;
@@ -132,7 +136,7 @@ export const getMenteeSessions = async (
   req: Request,
   res: Response
 ): Promise<void> => {
-  const menteeId = getUserIdForSession(req);
+  const menteeId = getUserId(req);
   if (!menteeId) {
     res.status(401).json({ message: "Authentication error" });
     return;
@@ -155,7 +159,7 @@ export const submitFeedback = async (
 ): Promise<void> => {
   const { id } = req.params;
   const { rating, comment } = req.body;
-  const userId = getUserIdForSession(req);
+  const userId = getUserId(req);
   const role = getUserRole(req);
 
   if (!userId || !role) {

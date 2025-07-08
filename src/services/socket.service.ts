@@ -1,6 +1,7 @@
 import { Server, Socket } from "socket.io";
 import { PrismaClient } from "@prisma/client";
 import jwt from "jsonwebtoken";
+import { getUserId } from "../utils/getUserId";
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
@@ -80,6 +81,62 @@ export const initializeSocket = (io: Server) => {
         }
       }
     );
+
+    // Listen for goal completion
+    socket.on(
+      "goalCompleted",
+      async (data: { goalId: string; menteeId: string; mentorId: string }) => {
+        const { goalId, menteeId, mentorId } = data;
+        const mentee = await prisma.user.findUnique({
+          where: { id: menteeId },
+          include: { profile: true },
+        });
+
+        if (mentee) {
+          const notification = await prisma.notification.create({
+            data: {
+              userId: mentorId,
+              type: "GOAL_COMPLETED",
+              message: `${
+                mentee.profile?.name || "A mentee"
+              } has completed a goal!`,
+              link: `/mentors`, // Or a more specific link
+            },
+          });
+          io.to(mentorId).emit("newNotification", notification);
+        }
+      }
+    );
+
+    // Listen for availability updates
+    socket.on("availabilityUpdated", async (data: { mentorId: string }) => {
+      const { mentorId } = data;
+      const mentor = await prisma.user.findUnique({
+        where: { id: mentorId },
+        include: { profile: true },
+      });
+
+      if (mentor) {
+        const mentees = await prisma.mentorshipRequest.findMany({
+          where: { mentorId, status: "ACCEPTED" },
+          select: { menteeId: true },
+        });
+
+        for (const mentee of mentees) {
+          const notification = await prisma.notification.create({
+            data: {
+              userId: mentee.menteeId,
+              type: "AVAILABILITY_UPDATED",
+              message: `${
+                mentor.profile?.name || "A mentor"
+              } has updated their availability.`,
+              link: `/book-session/${mentorId}`,
+            },
+          });
+          io.to(mentee.menteeId).emit("newNotification", notification);
+        }
+      }
+    });
 
     socket.on("disconnect", () => {
       console.log(`🔴 User disconnected: ${socket.id}`);

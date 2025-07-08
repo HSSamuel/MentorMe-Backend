@@ -37,21 +37,34 @@ export const getMentorPublicProfile = async (
   }
 };
 
-// GET all mentors
+// GET all mentors with pagination
 export const getAllMentors = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const skip = (page - 1) * limit;
+
     const mentors = await prisma.user.findMany({
       where: { role: "MENTOR" },
+      skip: skip,
+      take: limit,
       select: {
         id: true,
         email: true,
         profile: true,
       },
     });
-    res.status(200).json(mentors);
+
+    const totalMentors = await prisma.user.count({ where: { role: "MENTOR" } });
+
+    res.status(200).json({
+      mentors,
+      totalPages: Math.ceil(totalMentors / limit),
+      currentPage: page,
+    });
   } catch (error) {
     res.status(500).json({ message: "Error fetching mentors." });
   }
@@ -96,8 +109,9 @@ export const updateMyProfile = async (
   const { name, bio, skills, goals } = req.body;
   let avatarUrl: string | undefined = undefined;
 
+  // Get the file path from Cloudinary's response
   if (req.file) {
-    avatarUrl = `/uploads/${req.file.filename}`;
+    avatarUrl = req.file.path;
   }
 
   try {
@@ -126,7 +140,7 @@ export const updateMyProfile = async (
   }
 };
 
-// GET statistics for a mentor
+// GET statistics for a mentor (Optimized Version)
 export const getMentorStats = async (
   req: Request,
   res: Response
@@ -137,26 +151,33 @@ export const getMentorStats = async (
     return;
   }
   try {
-    const menteeCount = await prisma.mentorshipRequest.count({
-      where: { mentorId: userId, status: "ACCEPTED" },
-    });
-    const pendingRequests = await prisma.mentorshipRequest.count({
-      where: { mentorId: userId, status: "PENDING" },
-    });
-    const upcomingSessions = await prisma.session.count({
-      where: { mentorId: userId, date: { gte: new Date() } },
-    });
-    const completedSessions = await prisma.session.count({
-      where: { mentorId: userId, date: { lt: new Date() } },
-    });
-    const reviews = await prisma.review.findMany({
-      where: { mentorshipRequest: { mentorId: userId } },
-      select: { rating: true },
-    });
-    const averageRating =
-      reviews.length > 0
-        ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length
-        : 0;
+    // A single transaction to run all queries concurrently on the database
+    const [
+      menteeCount,
+      pendingRequests,
+      upcomingSessions,
+      completedSessions,
+      reviewAggregation,
+    ] = await prisma.$transaction([
+      prisma.mentorshipRequest.count({
+        where: { mentorId: userId, status: "ACCEPTED" },
+      }),
+      prisma.mentorshipRequest.count({
+        where: { mentorId: userId, status: "PENDING" },
+      }),
+      prisma.session.count({
+        where: { mentorId: userId, date: { gte: new Date() } },
+      }),
+      prisma.session.count({
+        where: { mentorId: userId, date: { lt: new Date() } },
+      }),
+      prisma.review.aggregate({
+        where: { mentorshipRequest: { mentorId: userId } },
+        _avg: { rating: true },
+      }),
+    ]);
+
+    const averageRating = reviewAggregation._avg.rating || 0;
 
     res.status(200).json({
       menteeCount,
@@ -181,18 +202,26 @@ export const getMenteeStats = async (
     return;
   }
   try {
-    const mentorCount = await prisma.mentorshipRequest.count({
-      where: { menteeId: userId, status: "ACCEPTED" },
-    });
-    const pendingRequests = await prisma.mentorshipRequest.count({
-      where: { menteeId: userId, status: "PENDING" },
-    });
-    const upcomingSessions = await prisma.session.count({
-      where: { menteeId: userId, date: { gte: new Date() } },
-    });
-    const completedSessions = await prisma.session.count({
-      where: { menteeId: userId, date: { lt: new Date() } },
-    });
+    const [
+        mentorCount,
+        pendingRequests,
+        upcomingSessions,
+        completedSessions,
+    ] = await prisma.$transaction([
+        prisma.mentorshipRequest.count({
+            where: { menteeId: userId, status: "ACCEPTED" },
+        }),
+        prisma.mentorshipRequest.count({
+            where: { menteeId: userId, status: "PENDING" },
+        }),
+        prisma.session.count({
+            where: { menteeId: userId, date: { gte: new Date() } },
+        }),
+        prisma.session.count({
+            where: { menteeId: userId, date: { lt: new Date() } },
+        }),
+    ]);
+    
     res.status(200).json({
       mentorCount,
       pendingRequests,

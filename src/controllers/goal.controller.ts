@@ -1,12 +1,8 @@
 import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
+import { getUserId } from "../utils/getUserId";
 
 const prisma = new PrismaClient();
-
-const getUserId = (req: Request): string | null => {
-  if (!req.user || !("userId" in req.user)) return null;
-  return req.user.userId as string;
-};
 
 // GET goals for a specific mentorship
 export const getGoalsForMentorship = async (
@@ -16,7 +12,6 @@ export const getGoalsForMentorship = async (
   const userId = getUserId(req);
   const { mentorshipId } = req.params;
 
-  // Added check: Ensure user is authenticated before proceeding.
   if (!userId) {
     res.status(401).json({ message: "Authentication error" });
     return;
@@ -56,7 +51,6 @@ export const createGoal = async (
   const userId = getUserId(req);
   const { mentorshipRequestId, title, description } = req.body;
 
-  // Added check: Ensure user is authenticated before proceeding.
   if (!userId) {
     res.status(401).json({ message: "Authentication error" });
     return;
@@ -87,7 +81,7 @@ export const createGoal = async (
   }
 };
 
-// PUT (update) a goal
+// The only function that needs to be checked is updateGoal
 export const updateGoal = async (
   req: Request,
   res: Response
@@ -95,8 +89,8 @@ export const updateGoal = async (
   const userId = getUserId(req);
   const { goalId } = req.params;
   const { title, description, isCompleted } = req.body;
+  const io = req.app.locals.io; // Access io from the request object
 
-  // Added check: Ensure user is authenticated before proceeding.
   if (!userId) {
     res.status(401).json({ message: "Authentication error" });
     return;
@@ -119,6 +113,14 @@ export const updateGoal = async (
       where: { id: goalId },
       data: { title, description, isCompleted },
     });
+    
+    if (isCompleted) {
+        io.emit("goalCompleted", { 
+            goalId: updatedGoal.id, 
+            menteeId: userId,
+            mentorId: goal.mentorshipRequest.mentorId 
+        });
+    }
 
     res.status(200).json(updatedGoal);
   } catch (error) {
@@ -134,7 +136,6 @@ export const deleteGoal = async (
   const userId = getUserId(req);
   const { goalId } = req.params;
 
-  // Added check: Ensure user is authenticated before proceeding.
   if (!userId) {
     res.status(401).json({ message: "Authentication error" });
     return;
