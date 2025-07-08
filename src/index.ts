@@ -7,20 +7,20 @@ import session from "express-session";
 import passport from "passport";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import path from "path";
 
 // Import all route handlers
 import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/user.routes";
 import requestRoutes from "./routes/request.routes";
 import adminRoutes from "./routes/admin.routes";
-// --- BEGIN: ADD THESE IMPORTS ---
 import sessionRoutes from "./routes/session.routes";
 import reviewRoutes from "./routes/review.routes";
 import goalRoutes from "./routes/goal.routes";
 import messageRoutes from "./routes/message.routes";
 import notificationRoutes from "./routes/notification.routes";
 import calendarRoutes from "./routes/calendar.routes";
-import path from "path";
+import aiRoutes from "./routes/ai.routes"; // Import the new AI routes
 
 // Import passport config and socket service
 import "./config/passport";
@@ -35,7 +35,6 @@ const MONGO_URI = process.env.MONGODB_URI;
 app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "../public/uploads")));
-app.use(jsonErrorHandler);
 
 // Session Middleware
 app.use(
@@ -62,6 +61,11 @@ app.use("/api/goals", goalRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/calendar", calendarRoutes);
+app.use("/api/ai", aiRoutes); // Use the new AI routes
+
+// --- Global Error Handler ---
+// This middleware MUST be placed after all other app.use() calls.
+app.use(jsonErrorHandler);
 
 // Create HTTP server and Socket.IO instance
 const httpServer = createServer(app);

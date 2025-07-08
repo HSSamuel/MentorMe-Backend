@@ -6,24 +6,20 @@ import jwt from "jsonwebtoken";
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
 
-// Define the shape of the user object attached by the auth middleware
-interface RequestUser {
-  userId: string;
-  role: Role;
-  email: string;
-}
-
-// Helper function with an explicit type assertion to resolve the error
+// Helper function to safely get userId from either JWT payload or Passport user object
 const getUserId = (req: Request): string | null => {
-  // We explicitly tell TypeScript that req.user is of type RequestUser
-  const user = req.user as RequestUser;
-  return user?.userId || null;
+  if (!req.user) return null;
+  if ("userId" in req.user) return req.user.userId as string; // From JWT
+  if ("id" in req.user) return req.user.id as string; // From Passport/Prisma
+  return null;
 };
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   const { email, password, role } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Create both the user and their profile in a single transaction
     const user = await prisma.user.create({
       data: {
         email,
@@ -31,19 +27,19 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         role,
         profile: {
           create: {
-            name: email.split("@")[0],
+            name: email.split("@")[0], // Use the part of the email before the @ as a default name
           },
         },
       },
       include: {
-        profile: true,
+        profile: true, // Include the new profile in the response
       },
     });
 
     const { password: _, ...userWithoutPassword } = user;
     res.status(201).json(userWithoutPassword);
   } catch (error) {
-    console.error("Registration Error:", error);
+    console.error("Registration Error:", error); // Log the actual error to the console
     res.status(500).json({ message: "Server error during registration" });
   }
 };
@@ -53,6 +49,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const user = await prisma.user.findUnique({ where: { email } });
 
+    // Corrected logic: check for user and user.password existence
     if (
       !user ||
       !user.password ||
@@ -84,6 +81,7 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
+      // Corrected: Added googleAccessToken and googleRefreshToken to the select query
       select: {
         id: true,
         email: true,

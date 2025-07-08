@@ -1,26 +1,19 @@
 import { Request, Response } from "express";
-import { PrismaClient, Role } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { createCalendarEvent } from "../services/calendar.service";
 
 const prisma = new PrismaClient();
 
-// Define the shape of the user object attached by the auth middleware
-interface RequestUser {
-  userId: string;
-  role: Role;
-  email: string;
-}
-
-// Corrected helper function with an explicit type assertion
 const getUserIdForSession = (req: Request): string | null => {
-  const user = req.user as RequestUser;
-  return user?.userId || null;
+  if (!req.user) return null;
+  if ("userId" in req.user) return req.user.userId as string;
+  if ("id" in req.user) return req.user.id as string;
+  return null;
 };
 
-// This helper can also be simplified
-const getUserRole = (req: Request): Role | null => {
-  const user = req.user as RequestUser;
-  return user?.role || null;
+const getUserRole = (req: Request): string | null => {
+  if (!req.user) return null;
+  return (req.user as any).role as string;
 };
 
 export const setAvailability = async (
@@ -75,6 +68,7 @@ export const createSession = async (
       include: { profile: true },
     });
 
+    // --- Create Notification for Mentor ---
     await prisma.notification.create({
       data: {
         userId: mentorId,
@@ -86,6 +80,7 @@ export const createSession = async (
       },
     });
 
+    // Google Calendar Event Creation
     try {
       const mentor = await prisma.user.findUnique({ where: { id: mentorId } });
       if (mentor && mentee) {
@@ -94,7 +89,7 @@ export const createSession = async (
           description:
             "Your mentorship session booked via the MentorMe Platform.",
           start: new Date(sessionTime),
-          end: new Date(new Date(sessionTime).getTime() + 60 * 60 * 1000),
+          end: new Date(new Date(sessionTime).getTime() + 60 * 60 * 1000), // Assume 1-hour session
           attendees: [mentor.email, mentee.email],
         };
         if (mentor.googleRefreshToken)

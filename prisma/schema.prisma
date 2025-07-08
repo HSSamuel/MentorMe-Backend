@@ -23,8 +23,8 @@ model User {
   facebookId String? @unique
 
   // Fields for Google Calendar Integration
-  googleAccessToken   String?
-  googleRefreshToken  String?
+  googleAccessToken  String?
+  googleRefreshToken String?
 
   // Relations
   mentorshipsAsMentor MentorshipRequest[] @relation("MentorRequests")
@@ -33,21 +33,22 @@ model User {
   sessionsAsMentee    Session[]           @relation("MenteeSessions")
   availability        Availability[]
   notifications       Notification[]
-  
+
   // Messaging Relations
-  conversations       Conversation[]      @relation(fields: [conversationIDs], references: [id])
-  conversationIDs     String[]            @db.ObjectId
-  sentMessages        Message[]           @relation("SentMessages")
+  conversations   Conversation[]   @relation(fields: [conversationIDs], references: [id])
+  conversationIDs String[]         @db.ObjectId
+  sentMessages    Message[]        @relation("SentMessages")
+  aiConversations AIConversation[]
 }
 
 model Profile {
-  id     String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId String   @unique @db.ObjectId
-  user   User     @relation(fields: [userId], references: [id])
-  name   String
-  bio    String?
-  skills String[]
-  goals  String?
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @unique @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  bio       String?
+  skills    String[]
+  goals     String?
   avatarUrl String?
 }
 
@@ -60,10 +61,10 @@ model MentorshipRequest {
 
   mentor User @relation("MentorRequests", fields: [mentorId], references: [id])
   mentee User @relation("MenteeRequests", fields: [menteeId], references: [id])
-  
+
   // Relations
-  goals     Goal[]
-  reviews   Review[] // Relation to Reviews
+  goals   Goal[]
+  reviews Review[] // Relation to Reviews
 }
 
 model Session {
@@ -88,56 +89,76 @@ model Availability {
 }
 
 model Conversation {
-    id          String    @id @default(auto()) @map("_id") @db.ObjectId
-    participants    User[]    @relation(fields: [participantIDs], references: [id])
-    participantIDs  String[]  @db.ObjectId
-    messages        Message[]
-    createdAt       DateTime  @default(now())
-    updatedAt       DateTime  @updatedAt
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  participants   User[]    @relation(fields: [participantIDs], references: [id])
+  participantIDs String[]  @db.ObjectId
+  messages       Message[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 model Message {
-    id              String        @id @default(auto()) @map("_id") @db.ObjectId
-    conversationId  String        @db.ObjectId
-    conversation    Conversation  @relation(fields: [conversationId], references: [id])
-    senderId        String        @db.ObjectId
-    sender          User          @relation("SentMessages", fields: [senderId], references: [id])
-    content         String
-    createdAt       DateTime      @default(now())
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId String       @db.ObjectId
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  senderId       String       @db.ObjectId
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id])
+  content        String
+  createdAt      DateTime     @default(now())
+}
+
+model AIConversation {
+  id        String      @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String      @db.ObjectId
+  title     String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  messages  AIMessage[]
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AIMessage {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId String   @db.ObjectId
+  content        String
+  sender         String // "USER" or "AI"
+  createdAt      DateTime @default(now())
+
+  conversation AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 }
 
 model Goal {
-  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
-  mentorshipRequestId String    @db.ObjectId
+  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
+  mentorshipRequestId String            @db.ObjectId
   mentorshipRequest   MentorshipRequest @relation(fields: [mentorshipRequestId], references: [id])
   title               String
   description         String?
-  isCompleted         Boolean   @default(false)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  isCompleted         Boolean           @default(false)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 }
 
 model Notification {
-  id          String            @id @default(auto()) @map("_id") @db.ObjectId
-  userId      String            @db.ObjectId
-  user        User              @relation(fields: [userId], references: [id])
-  type        NotificationType
-  message     String
-  link        String?
-  isRead      Boolean           @default(false)
-  createdAt   DateTime          @default(now())
+  id        String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String           @db.ObjectId
+  user      User             @relation(fields: [userId], references: [id])
+  type      NotificationType
+  message   String
+  link      String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
 }
 
 // New Model for Reviews
 model Review {
-  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
-  mentorshipRequestId String    @db.ObjectId
+  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
+  mentorshipRequestId String            @db.ObjectId
   mentorshipRequest   MentorshipRequest @relation(fields: [mentorshipRequestId], references: [id])
-  rating              Int       // Rating from 1 to 5
+  rating              Int // Rating from 1 to 5
   comment             String?
-  createdAt           DateTime  @default(now())
+  createdAt           DateTime          @default(now())
 }
-
 
 enum Role {
   MENTEE
