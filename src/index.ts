@@ -38,7 +38,7 @@ const corsOptions = {
   credentials: true,
 };
 
-app.use(cors());
+app.use(cors(corsOptions)); // Pass the options here
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "../public/uploads")));
 
@@ -77,7 +77,6 @@ app.use(jsonErrorHandler);
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  // REMOVED the 'export' keyword from here
   cors: {
     origin: process.env.FRONTEND_URL || "http://localhost:3000",
     methods: ["GET", "POST"],
