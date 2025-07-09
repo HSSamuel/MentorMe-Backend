@@ -1,0 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const ai_controller_1 = require("../controllers/ai.controller");
+const auth_middleware_1 = require("../middleware/auth.middleware");
+const express_validator_1 = require("express-validator");
+const validateRequest_1 = require("../middleware/validateRequest");
+const router = (0, express_1.Router)();
+router.use(auth_middleware_1.authMiddleware);
+router.post("/chat", ai_controller_1.handleAIChat);
+router.post("/chat/cohere", ai_controller_1.handleCohereChat);
+router.get("/conversations", ai_controller_1.getAIConversations);
+router.get("/conversations/:conversationId", [(0, express_validator_1.param)("conversationId").isMongoId()], validateRequest_1.validateRequest, ai_controller_1.getAIMessages);
+exports.default = router;
