@@ -31,14 +31,17 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGODB_URI;
 
-// --- More Robust CORS Configuration ---
+// --- Correct CORS Configuration ---
 const allowedOrigins = [
   process.env.FRONTEND_URL || "http://localhost:3000",
   "https://mentor-me-pi.vercel.app", // Your main Vercel URL
 ];
 
 const corsOptions = {
-  origin: (origin, callback) => {
+  origin: (
+    origin: string | undefined,
+    callback: (err: Error | null, allow?: boolean) => void
+  ) => {
     // allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) === -1) {
