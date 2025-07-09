@@ -33,27 +33,12 @@ const MONGO_URI = process.env.MONGODB_URI;
 
 // --- More Robust CORS Configuration ---
 const allowedOrigins = [
-  process.env.FRONTEND_URL || "http://localhost:3000",
   "https://mentor-me-pi.vercel.app", // Your main Vercel URL
-  "https://mentor-me-git-main-hunsa-semakos-projects.vercel.app",
-  "https://mentor-me-hunsa-semakos-projects.vercel.app"
+  "http://localhost:3000", // For local development
 ];
 
 const corsOptions = {
-  origin: (
-    origin: string | undefined,
-    callback: (err: Error | null, allow?: boolean) => void
-  ) => {
-    // Allow requests with no origin (like mobile apps or Postman requests)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg =
-        "The CORS policy for this site does not " +
-        "allow access from the specified Origin.";
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
-  },
+  origin: allowedOrigins,
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
 };
@@ -98,7 +83,7 @@ app.use(jsonErrorHandler);
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: allowedOrigins, // Use the same origins for Socket.IO
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
   },
 });
