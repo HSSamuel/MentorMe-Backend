@@ -41,7 +41,13 @@ require("./jobs/reminder.cron");
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGODB_URI;
-app.use((0, cors_1.default)());
+// --- Correct CORS Configuration ---
+const corsOptions = {
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+};
+app.use((0, cors_1.default)(corsOptions));
 app.use(express_1.default.json());
 app.use("/uploads", express_1.default.static(path_1.default.join(__dirname, "../public/uploads")));
 app.use((0, express_session_1.default)({
@@ -72,13 +78,11 @@ app.use("/api/ai", ai_routes_1.default);
 app.use(error_middleware_1.jsonErrorHandler);
 const httpServer = (0, http_1.createServer)(app);
 const io = new socket_io_1.Server(httpServer, {
-    // REMOVED the 'export' keyword from here
     cors: {
         origin: process.env.FRONTEND_URL || "http://localhost:3000",
         methods: ["GET", "POST"],
     },
 });
-// Make the io instance available to all routes via app.locals
 app.locals.io = io;
 (0, socket_service_1.initializeSocket)(io);
 const startServer = () => __awaiter(void 0, void 0, void 0, function* () {
