@@ -82,24 +82,11 @@ app.locals.io = io;
 
 initializeSocket(io);
 
-const startServer = async () => {
-  if (!MONGO_URI) {
-    console.error("🔴 MONGO_URI is not defined in .env file");
-    process.exit(1);
-  }
+// Connect to MongoDB when the function starts
+mongoose
+  .connect(process.env.MONGODB_URI!)
+  .then(() => console.log("🟢 MongoDB connected successfully"))
+  .catch((error) => console.error("🔴 Could not connect to MongoDB", error));
 
-  try {
-    await mongoose.connect(MONGO_URI);
-    console.log("🟢 MongoDB connected successfully");
-
-    httpServer.listen(PORT, () => {
-      console.log(`🚀 Server is running on http://localhost:${PORT}`);
-    });
-  } catch (error) {
-    console.error("🔴 Could not connect to MongoDB");
-    console.error(error);
-    process.exit(1);
-  }
-};
-
-startServer();
+// Export the app for Vercel
+export default app;
