@@ -33,7 +33,7 @@ router.put(
   authMiddleware,
   mentorMiddleware,
   [
-    param("id").isUUID().withMessage("Invalid request ID"),
+    param("id").isMongoId().withMessage("Invalid request ID"),
     body("status").isIn(["ACCEPTED", "REJECTED"]).withMessage("Invalid status"),
   ],
   validateRequest,

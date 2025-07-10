@@ -33,7 +33,8 @@ const MONGO_URI = process.env.MONGODB_URI;
 
 // --- More Robust CORS Configuration ---
 const allowedOrigins = [
-  "https://mentor-me-pi.vercel.app", // Your main Vercel URL
+  "https://mentor-me-pi.vercel.app", // My main Vercel URL
+  "https://dsamentor.netlify.app/", // My main Netlify URL
   "http://localhost:3000", // For local development
 ];
 
