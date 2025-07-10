@@ -10,7 +10,7 @@ import path from "path";
 import rateLimit from "express-rate-limit";
 import MongoStore from "connect-mongo";
 
-// Import all route handlers
+// ... (your route imports)
 import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/user.routes";
 import requestRoutes from "./routes/request.routes";
@@ -34,45 +34,30 @@ const MONGO_URI = process.env.MONGODB_URI;
 
 app.set("trust proxy", 1);
 
-// --- Correct CORS Configuration ---
-const allowedOrigins = [
-  "https://dsamentor.netlify.app",
-  "https://mentor-me-pi.vercel.app",
-  "http://localhost:3000",
-];
+// --- Simplified CORS Configuration for Debugging ---
+app.use(
+  cors({
+    origin: "*", // Allow all origins
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+  })
+);
 
-const corsOptions = {
-  origin: (
-    origin: string | undefined,
-    callback: (err: Error | null, allow?: boolean) => void
-  ) => {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true,
-};
-
-app.use(cors(corsOptions));
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "../public/uploads")));
 
-// --- Session Middleware with MongoStore ---
 app.use(
   session({
     secret: process.env.JWT_SECRET || "a-default-session-secret",
     resave: false,
     saveUninitialized: false,
     store: MongoStore.create({
-      mongoUrl: process.env.MONGODB_URI,
+      mongoUrl: MONGO_URI,
       collectionName: "sessions",
     }),
     cookie: {
       secure: process.env.NODE_ENV === "production",
-      maxAge: 1000 * 60 * 60 * 24, // 24 hours
+      maxAge: 1000 * 60 * 60 * 24,
     },
   })
 );
@@ -104,7 +89,7 @@ app.use(jsonErrorHandler);
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: allowedOrigins,
+    origin: "*", // Also allow all origins for Socket.IO
     methods: ["GET", "POST"],
   },
 });
