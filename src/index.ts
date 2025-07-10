@@ -8,7 +8,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import path from "path";
 import rateLimit from "express-rate-limit";
-import MongoStore from "connect-mongo"; // Corrected Import
+import MongoStore from "connect-mongo";
 
 // Import all route handlers
 import authRoutes from "./routes/auth.routes";
@@ -67,12 +67,12 @@ app.use(
     resave: false,
     saveUninitialized: false,
     store: MongoStore.create({
-      mongoUrl: MONGO_URI,
+      mongoUrl: process.env.MONGODB_URI,
       collectionName: "sessions",
     }),
     cookie: {
       secure: process.env.NODE_ENV === "production",
-      maxAge: 1000 * 60 * 60 * 24, // Session expires in 24 hours
+      maxAge: 1000 * 60 * 60 * 24, // 24 hours
     },
   })
 );
