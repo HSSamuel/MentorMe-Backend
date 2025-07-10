@@ -12,6 +12,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "cross-env": "^7.0.3",
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.11.1",
     "@types/cors": "^2.8.19",
@@ -53,7 +54,6 @@
     "@types/passport-facebook": "^3.0.3",
     "@types/passport-google-oauth20": "^2.0.16",
     "@types/zxcvbn": "^4.4.4",
-    "cross-env": "^7.0.3",
     "nodemon": "^3.1.10",
     "prisma": "^6.11.1"
   }
