@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "build": "npx tsc",
-    "start": "NODE_OPTIONS='--use-openssl-ca' node dist/index.js",
+    "start": "cross-env NODE_OPTIONS='--use-openssl-ca' node dist/index.js",
     "dev": "nodemon src/index.ts"
   },
   "keywords": [],
@@ -53,6 +53,7 @@
     "@types/passport-facebook": "^3.0.3",
     "@types/passport-google-oauth20": "^2.0.16",
     "@types/zxcvbn": "^4.4.4",
+    "cross-env": "^7.0.3",
     "nodemon": "^3.1.10",
     "prisma": "^6.11.1"
   }

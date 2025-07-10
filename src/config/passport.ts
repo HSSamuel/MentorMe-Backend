@@ -57,7 +57,7 @@ passport.use(
   )
 );
 
-// Facebook Strategy
+// Facebook Strategy with enableProof
 passport.use(
   new FacebookStrategy(
     {
@@ -65,6 +65,7 @@ passport.use(
       clientSecret: process.env.FACEBOOK_APP_SECRET!,
       callbackURL: "/api/auth/facebook/callback",
       profileFields: ["id", "displayName", "emails"],
+      enableProof: true, // Add this line
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
