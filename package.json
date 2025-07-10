@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "build": "npx tsc",
-    "start": "NODE_OPTIONS='--use-openssl-ca' node dist/index.js",
+    "start": "cross-env NODE_OPTIONS='--use-openssl-ca' node dist/index.js",
     "dev": "nodemon src/index.ts"
   },
   "keywords": [],
