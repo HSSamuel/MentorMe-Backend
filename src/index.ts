@@ -8,7 +8,6 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import path from "path";
 import rateLimit from "express-rate-limit";
-import MongoStore from "connect-mongo";
 
 // Import all route handlers
 import authRoutes from "./routes/auth.routes";
@@ -32,26 +31,14 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGODB_URI;
 
-app.set("trust proxy", 1);
-
-// --- Correct CORS Configuration ---
+// --- More Robust CORS Configuration ---
 const allowedOrigins = [
-  "https://dsamentor.netlify.app",
-  "https://mentor-me-pi.vercel.app",
-  "http://localhost:3000",
+  "https://mentor-me-pi.vercel.app", // Your main Vercel URL
+  "http://localhost:3000", // For local development
 ];
 
 const corsOptions = {
-  origin: (
-    origin: string | undefined,
-    callback: (err: Error | null, allow?: boolean) => void
-  ) => {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
+  origin: allowedOrigins,
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
 };
@@ -60,20 +47,12 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "../public/uploads")));
 
-// --- Session Middleware with MongoStore ---
 app.use(
   session({
     secret: process.env.JWT_SECRET || "a-default-session-secret",
     resave: false,
     saveUninitialized: false,
-    store: MongoStore.create({
-      mongoUrl: MONGO_URI,
-      collectionName: "sessions",
-    }),
-    cookie: {
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 1000 * 60 * 60 * 24,
-    },
+    cookie: { secure: process.env.NODE_ENV === "production" },
   })
 );
 
