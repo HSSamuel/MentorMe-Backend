@@ -3,13 +3,12 @@ import { PrismaClient, Role } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// GET /admin/matches
+// Ensure this function is exported
 export const getAllMatches = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   try {
-    // Corrected: Removed the invalid 'where' clause to fix the compilation error.
     const matches = await prisma.mentorshipRequest.findMany({
       include: {
         mentor: {
