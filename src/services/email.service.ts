@@ -1,10 +1,11 @@
 import nodemailer from "nodemailer";
+import config from "../config"; // Import our new config loader
 
 const transporter = nodemailer.createTransport({
   service: "Gmail",
   auth: {
-    user: process.env.EMAIL,
-    pass: process.env.EMAIL_PASS,
+    user: config.get("EMAIL"),
+    pass: config.get("EMAIL_PASS"),
   },
 });
 

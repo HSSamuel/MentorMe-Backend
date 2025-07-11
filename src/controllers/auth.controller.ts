@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import zxcvbn from "zxcvbn";
 import crypto from "crypto";
 import { sendPasswordResetEmail } from "../services/email.service";
+import config from "../config";
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
@@ -142,7 +143,7 @@ export const forgotPassword = async (
       },
     });
 
-    const resetURL = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+    const resetURL = `${config.get("FRONTEND_URL")}/reset-password/${resetToken}`;
 
     await sendPasswordResetEmail(user.email, resetURL);
 
