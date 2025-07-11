@@ -57,7 +57,8 @@ router.get(
     const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
       expiresIn: "1d",
     });
-    res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${token}`);
+    const frontendUrl = process.env.FRONTEND_URL.replace(/\/$/, "");
+    res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
   }
 );
 
@@ -78,7 +79,8 @@ router.get(
     const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
       expiresIn: "1d",
     });
-    res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${token}`);
+    const frontendUrl = process.env.FRONTEND_URL.replace(/\/$/, "");
+    res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
   }
 );
 
