@@ -49,7 +49,7 @@ router.get(
 router.get(
   "/google/callback",
   passport.authenticate("google", {
-    failureRedirect: `${process.env.FRONTEND_URL}/login`,
+    failureRedirect: `${process.env.FRONTEND_URL || ""}/login`,
     session: false,
   }),
   (req, res) => {
@@ -57,7 +57,7 @@ router.get(
     const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
       expiresIn: "1d",
     });
-    const frontendUrl = process.env.FRONTEND_URL.replace(/\/$/, "");
+    const frontendUrl = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
     res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
   }
 );
@@ -71,7 +71,7 @@ router.get(
 router.get(
   "/facebook/callback",
   passport.authenticate("facebook", {
-    failureRedirect: `${process.env.FRONTEND_URL}/login`,
+    failureRedirect: `${process.env.FRONTEND_URL || ""}/login`,
     session: false,
   }),
   (req, res) => {
@@ -79,7 +79,7 @@ router.get(
     const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
       expiresIn: "1d",
     });
-    const frontendUrl = process.env.FRONTEND_URL.replace(/\/$/, "");
+    const frontendUrl = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
     res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
   }
 );
