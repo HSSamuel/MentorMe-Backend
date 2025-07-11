@@ -28,9 +28,6 @@ import { initializeSocket } from "./services/socket.service";
 import { jsonErrorHandler } from "./middleware/error.middleware";
 import "./jobs/reminder.cron";
 
-// ADD THIS LINE FOR DIAGNOSTICS
-console.log("RESEND_API_KEY loaded:", !!process.env.RESEND_API_KEY);
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGODB_URI;
@@ -123,7 +120,7 @@ const startServer = async () => {
     console.log("🟢 MongoDB connected successfully");
 
     httpServer.listen(PORT, () => {
-      console.log(`🚀 Server is running on http://localhost:${PORT}`);
+      console.log(`🚀 Server is running on PORT:${PORT}`);
     });
   } catch (error) {
     console.error("🔴 Could not connect to MongoDB");

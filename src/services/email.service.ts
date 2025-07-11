@@ -25,7 +25,7 @@ export const sendReminderEmail = async (to: string, sessionTime: Date) => {
 
 export const sendPasswordResetEmail = async (to: string, resetURL: string) => {
   await transporter.sendMail({
-    from: `"Mentor Platform" <${process.env.EMAIL}>`,
+    from: `"MentorMe" <${process.env.EMAIL}>`,
     to,
     subject: "Password Reset Request",
     html: `<p>You are receiving this email because you have requested the reset of the password for your account.</p>
