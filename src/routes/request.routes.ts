@@ -1,3 +1,4 @@
+// Mentor/Backend/src/routes/request.routes.ts
 import { Router } from "express";
 import {
   createRequest,
@@ -15,6 +16,7 @@ import { validateRequest } from "../middleware/validateRequest";
 
 const router = Router();
 
+// This route is correct
 router.post(
   "/",
   authMiddleware,
@@ -24,16 +26,19 @@ router.post(
   createRequest
 );
 
+// This route is correct
 router.get("/sent", authMiddleware, menteeMiddleware, getSentRequests);
 
+// This route is correct
 router.get("/received", authMiddleware, mentorMiddleware, getReceivedRequests);
 
+// FIX: Changed .isUUID() to .isMongoId()
 router.put(
   "/:id",
   authMiddleware,
   mentorMiddleware,
   [
-    param("id").isMongoId().withMessage("Invalid request ID"),
+    param("id").isMongoId().withMessage("Invalid request ID"), // Changed from isUUID()
     body("status").isIn(["ACCEPTED", "REJECTED"]).withMessage("Invalid status"),
   ],
   validateRequest,

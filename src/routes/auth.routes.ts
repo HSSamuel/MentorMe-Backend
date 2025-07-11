@@ -1,7 +1,13 @@
 import { Router } from "express";
 import passport from "passport";
 import jwt from "jsonwebtoken";
-import { register, login, getMe } from "../controllers/auth.controller";
+import {
+  register,
+  login,
+  getMe,
+  forgotPassword,
+  resetPassword,
+} from "../controllers/auth.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 import { body } from "express-validator";
 import { validateRequest } from "../middleware/validateRequest";
@@ -88,6 +94,26 @@ router.get(
     const frontendUrl = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
     res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
   }
+);
+
+// Forgot/Reset Password Routes
+router.post(
+  "/forgot-password",
+  [body("email").isEmail().withMessage("Please enter a valid email")],
+  validateRequest,
+  forgotPassword
+);
+
+router.post(
+  "/reset-password",
+  [
+    body("token").notEmpty().withMessage("Token is required"),
+    body("password")
+      .isLength({ min: 6 })
+      .withMessage("Password must be at least 6 characters long"),
+  ],
+  validateRequest,
+  resetPassword
 );
 
 export default router;
