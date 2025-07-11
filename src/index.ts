@@ -52,7 +52,7 @@ app.use(
   session({
     secret: process.env.JWT_SECRET || "a-default-session-secret",
     resave: false,
-    saveUninitialized: false,
+    saveUninitialized: true, // Set to true to allow session creation for social logins
     cookie: { secure: process.env.NODE_ENV === "production" },
   })
 );
