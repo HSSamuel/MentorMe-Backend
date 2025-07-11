@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import config from "../config"; // Import our new config loader
+import config from "../config";
 
 const transporter = nodemailer.createTransport({
   service: "Gmail",
@@ -16,7 +16,7 @@ export const sendReminderEmail = async (to: string, sessionTime: Date) => {
   }).format(sessionTime);
 
   await transporter.sendMail({
-    from: `"Mentor Platform" <${process.env.EMAIL}>`,
+    from: `"MentorMe" <${process.env.EMAIL}>`,
     to,
     subject: "Upcoming Mentorship Session Reminder",
     html: `<p>Reminder: You have a session scheduled for ${formattedTime}</p>`,
