@@ -63,12 +63,12 @@ const corsOptions = {
 };
 app.use((0, cors_1.default)(corsOptions));
 app.use(express_1.default.json());
-app.use("/uploads", express_1.default.static(path_1.default.join(__dirname, "../public/uploads")));
+app.use("/uploads", express_1.default.static(path_1.default.join(__dirname, "..", "public", "uploads")));
 // --- Session Middleware with MongoStore ---
 app.use((0, express_session_1.default)({
     secret: process.env.JWT_SECRET || "a-default-session-secret",
     resave: false,
-    saveUninitialized: false,
+    saveUninitialized: true, // This is the crucial change
     store: connect_mongo_1.default.create({
         mongoUrl: MONGO_URI,
         collectionName: "sessions",

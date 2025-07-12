@@ -35,37 +35,30 @@ export const getAllMatches = async (
   }
 };
 
-// GET /admin/users
 export const getAllUsers = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20; // Default to 20 per page
+    const skip = (page - 1) * limit;
+
     const users = await prisma.user.findMany({
+      skip: skip,
+      take: limit,
       include: { profile: true },
     });
-    res.status(200).json(users);
+
+    const totalUsers = await prisma.user.count();
+
+    res.status(200).json({
+      users,
+      totalPages: Math.ceil(totalUsers / limit),
+      currentPage: page,
+    });
   } catch (error) {
     res.status(500).json({ message: "Error fetching users." });
-  }
-};
-
-// PUT /admin/users/:id/role
-export const updateUserRole = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
-  const { id } = req.params;
-  const { role } = req.body;
-  try {
-    const updatedUser = await prisma.user.update({
-      where: { id },
-      data: { role: role as Role },
-    });
-    const { password, ...userWithoutPassword } = updatedUser;
-    res.status(200).json(userWithoutPassword);
-  } catch (error) {
-    res.status(500).json({ message: "Error updating user role." });
   }
 };
 
@@ -130,17 +123,33 @@ export const getStats = async (req: Request, res: Response): Promise<void> => {
       where: { status: "PENDING" },
     });
 
-    res
-      .status(200)
-      .json({
-        totalUsers,
-        totalMentors,
-        totalMentees,
-        totalMatches,
-        totalSessions,
-        pendingRequests,
-      });
+    res.status(200).json({
+      totalUsers,
+      totalMentors,
+      totalMentees,
+      totalMatches,
+      totalSessions,
+      pendingRequests,
+    });
   } catch (error) {
     res.status(500).json({ message: "Error fetching admin stats." });
+  }
+};
+
+export const updateUserRole = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { id } = req.params;
+  const { role } = req.body;
+  try {
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: { role: role as Role },
+    });
+    const { password, ...userWithoutPassword } = updatedUser;
+    res.status(200).json(userWithoutPassword);
+  } catch (error) {
+    res.status(500).json({ message: "Error updating user role." });
   }
 };

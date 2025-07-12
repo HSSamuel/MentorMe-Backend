@@ -61,12 +61,13 @@ passport_1.default.use(new passport_google_oauth20_1.Strategy({
         return done(error, false);
     }
 })));
-// Facebook Strategy
+// Facebook Strategy with enableProof
 passport_1.default.use(new passport_facebook_1.Strategy({
     clientID: process.env.FACEBOOK_APP_ID,
     clientSecret: process.env.FACEBOOK_APP_SECRET,
     callbackURL: "/api/auth/facebook/callback",
     profileFields: ["id", "displayName", "emails"],
+    enableProof: true, // Add this line
 }, (accessToken, refreshToken, profile, done) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     try {
@@ -108,7 +109,7 @@ passport_1.default.serializeUser((user, done) => {
 });
 passport_1.default.deserializeUser((id, done) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const user = yield prisma.user.findUnique({ where: { id } });
+        const user = yield prisma.user.findUnique({ where: { id: id } });
         done(null, user);
     }
     catch (error) {

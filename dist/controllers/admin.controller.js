@@ -20,13 +20,12 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getStats = exports.assignMentor = exports.getAllSessions = exports.updateUserRole = exports.getAllUsers = exports.getAllMatches = void 0;
+exports.updateUserRole = exports.getStats = exports.assignMentor = exports.getAllSessions = exports.getAllUsers = exports.getAllMatches = void 0;
 const client_1 = require("@prisma/client");
 const prisma = new client_1.PrismaClient();
-// GET /admin/matches
+// Ensure this function is exported
 const getAllMatches = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        // Corrected: Removed the invalid 'where' clause to fix the compilation error.
         const matches = yield prisma.mentorshipRequest.findMany({
             include: {
                 mentor: {
@@ -54,36 +53,28 @@ const getAllMatches = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.getAllMatches = getAllMatches;
-// GET /admin/users
 const getAllUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20; // Default to 20 per page
+        const skip = (page - 1) * limit;
         const users = yield prisma.user.findMany({
+            skip: skip,
+            take: limit,
             include: { profile: true },
         });
-        res.status(200).json(users);
+        const totalUsers = yield prisma.user.count();
+        res.status(200).json({
+            users,
+            totalPages: Math.ceil(totalUsers / limit),
+            currentPage: page,
+        });
     }
     catch (error) {
         res.status(500).json({ message: "Error fetching users." });
     }
 });
 exports.getAllUsers = getAllUsers;
-// PUT /admin/users/:id/role
-const updateUserRole = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { id } = req.params;
-    const { role } = req.body;
-    try {
-        const updatedUser = yield prisma.user.update({
-            where: { id },
-            data: { role: role },
-        });
-        const { password } = updatedUser, userWithoutPassword = __rest(updatedUser, ["password"]);
-        res.status(200).json(userWithoutPassword);
-    }
-    catch (error) {
-        res.status(500).json({ message: "Error updating user role." });
-    }
-});
-exports.updateUserRole = updateUserRole;
 // GET /admin/sessions
 const getAllSessions = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -128,8 +119,8 @@ exports.assignMentor = assignMentor;
 const getStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const totalUsers = yield prisma.user.count();
-        const totalMentors = yield prisma.user.count({ where: { role: 'MENTOR' } });
-        const totalMentees = yield prisma.user.count({ where: { role: 'MENTEE' } });
+        const totalMentors = yield prisma.user.count({ where: { role: "MENTOR" } });
+        const totalMentees = yield prisma.user.count({ where: { role: "MENTEE" } });
         const totalMatches = yield prisma.mentorshipRequest.count({
             where: { status: "ACCEPTED" },
         });
@@ -137,10 +128,33 @@ const getStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const pendingRequests = yield prisma.mentorshipRequest.count({
             where: { status: "PENDING" },
         });
-        res.status(200).json({ totalUsers, totalMentors, totalMentees, totalMatches, totalSessions, pendingRequests });
+        res.status(200).json({
+            totalUsers,
+            totalMentors,
+            totalMentees,
+            totalMatches,
+            totalSessions,
+            pendingRequests,
+        });
     }
     catch (error) {
         res.status(500).json({ message: "Error fetching admin stats." });
     }
 });
 exports.getStats = getStats;
+const updateUserRole = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { role } = req.body;
+    try {
+        const updatedUser = yield prisma.user.update({
+            where: { id },
+            data: { role: role },
+        });
+        const { password } = updatedUser, userWithoutPassword = __rest(updatedUser, ["password"]);
+        res.status(200).json(userWithoutPassword);
+    }
+    catch (error) {
+        res.status(500).json({ message: "Error updating user role." });
+    }
+});
+exports.updateUserRole = updateUserRole;

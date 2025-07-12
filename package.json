@@ -6,7 +6,7 @@
     "clean": "rimraf dist",
     "build": "npm run clean && tsc",
     "dev": "ts-node src/index.ts",
-  "start": "ts-node src/index.ts",
+    "start": "node --max-old-space-size=4096 dist/index.js",
     "postinstall": "npx prisma generate"
   },
   "keywords": [],

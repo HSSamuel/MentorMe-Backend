@@ -23,11 +23,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMe = exports.login = exports.register = void 0;
+exports.resetPassword = exports.forgotPassword = exports.getMe = exports.login = exports.register = void 0;
 const client_1 = require("@prisma/client");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const zxcvbn_1 = __importDefault(require("zxcvbn"));
+const crypto_1 = __importDefault(require("crypto"));
+const email_service_1 = require("../services/email.service");
+const config_1 = __importDefault(require("../config"));
 const prisma = new client_1.PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
 // Helper function to safely get userId from either JWT payload or Passport user object
@@ -124,3 +127,70 @@ const getMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.getMe = getMe;
+const forgotPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { email } = req.body;
+    try {
+        const user = yield prisma.user.findUnique({ where: { email } });
+        if (!user) {
+            // Don't reveal that the user doesn't exist for security reasons
+            res.status(200).json({
+                message: "If a user with that email exists, a password reset link has been sent.",
+            });
+            return;
+        }
+        const resetToken = crypto_1.default.randomBytes(32).toString("hex");
+        const passwordResetToken = crypto_1.default
+            .createHash("sha256")
+            .update(resetToken)
+            .digest("hex");
+        const passwordResetExpires = new Date(Date.now() + 10 * 60 * 1000); // Token expires in 10 minutes
+        yield prisma.user.update({
+            where: { email },
+            data: {
+                passwordResetToken,
+                passwordResetExpires,
+            },
+        });
+        const resetURL = `${config_1.default.get("FRONTEND_URL")}/reset-password/${resetToken}`;
+        yield (0, email_service_1.sendPasswordResetEmail)(user.email, resetURL);
+        res.status(200).json({
+            message: "If a user with that email exists, a password reset link has been sent.",
+        });
+    }
+    catch (error) {
+        console.error("Forgot Password Error:", error);
+        res.status(500).json({ message: "Server error" });
+    }
+});
+exports.forgotPassword = forgotPassword;
+const resetPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { token, password } = req.body;
+    try {
+        const hashedToken = crypto_1.default.createHash("sha256").update(token).digest("hex");
+        const user = yield prisma.user.findFirst({
+            where: {
+                passwordResetToken: hashedToken,
+                passwordResetExpires: { gt: new Date() },
+            },
+        });
+        if (!user) {
+            res.status(400).json({ message: "Token is invalid or has expired" });
+            return;
+        }
+        const hashedPassword = yield bcryptjs_1.default.hash(password, 12);
+        yield prisma.user.update({
+            where: { id: user.id },
+            data: {
+                password: hashedPassword,
+                passwordResetToken: null,
+                passwordResetExpires: null,
+            },
+        });
+        res.status(200).json({ message: "Password has been reset." });
+    }
+    catch (error) {
+        console.error("Reset Password Error:", error);
+        res.status(500).json({ message: "Server error" });
+    }
+});
+exports.resetPassword = resetPassword;
