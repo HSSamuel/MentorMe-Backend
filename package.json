@@ -1,11 +1,13 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "index.ts",
   "scripts": {
-    "build": "npx tsc",
-    "start": "cross-env NODE_OPTIONS='--use-openssl-ca' node dist/index.js",
-    "dev": "nodemon src/index.ts"
+    "clean": "rimraf dist",
+    "build": "npm run clean && tsc --build",
+    "start": "cross-env NODE_ENV=production node dist/index.js",
+    "dev": "nodemon src/index.ts",
+    "postinstall": "npx prisma generate"
   },
   "keywords": [],
   "author": "",

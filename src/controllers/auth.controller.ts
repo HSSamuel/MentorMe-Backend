@@ -144,10 +144,8 @@ export const forgotPassword = async (
     });
 
     const resetURL = `${config.get("FRONTEND_URL")}/reset-password/${resetToken}`;
-    console.log("Generated Reset URL:", resetURL);
 
     await sendPasswordResetEmail(user.email, resetURL);
-    console.log("Password reset email sent successfully to:", user.email);
 
     res.status(200).json({
       message:
