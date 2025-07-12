@@ -1,12 +1,12 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "dist/index.js",
   "scripts": {
     "clean": "rimraf dist",
-    "build": "npm run clean && tsc --build",
-    "start": "cross-env NODE_ENV=production node dist/index.js",
-    "dev": "nodemon src/index.ts",
+    "build": "npm run clean && tsc",
+    "dev": "ts-node src/index.ts",
+    "start": "ts-node src/index.ts",
     "postinstall": "npx prisma generate"
   },
   "keywords": [],
