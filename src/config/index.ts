@@ -1,6 +1,11 @@
-// Mentor/Backend/src/config/index.ts
 import path from "path";
 import fs from "fs";
+import dotenv from "dotenv";
+
+// Load environment variables from .env file in development
+if (process.env.NODE_ENV !== "production") {
+  dotenv.config();
+}
 
 const env = process.env.NODE_ENV || "development";
 let config = {};
