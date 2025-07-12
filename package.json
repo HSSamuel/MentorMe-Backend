@@ -6,7 +6,7 @@
     "clean": "rimraf dist",
     "build": "npm run clean && tsc",
     "dev": "ts-node src/index.ts",
-    "start": "node dist/index.js",
+  "start": "ts-node src/index.ts",
     "postinstall": "npx prisma generate"
   },
   "keywords": [],
@@ -57,7 +57,6 @@
     "@types/passport-facebook": "^3.0.3",
     "@types/passport-google-oauth20": "^2.0.16",
     "@types/zxcvbn": "^4.4.4",
-    "cpr": "^3.0.1",
     "nodemon": "^3.1.10",
     "prisma": "^6.11.1"
   }
