@@ -57,6 +57,7 @@
     "@types/passport-facebook": "^3.0.3",
     "@types/passport-google-oauth20": "^2.0.16",
     "@types/zxcvbn": "^4.4.4",
+    "cpr": "^3.0.1",
     "nodemon": "^3.1.10",
     "prisma": "^6.11.1"
   }
