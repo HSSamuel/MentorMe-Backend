@@ -29,7 +29,7 @@ model User {
   passwordResetExpires DateTime?
   conversations        Conversation[]      @relation(fields: [conversationIDs], references: [id])
   conversationIDs      String[]            @db.ObjectId
-}
+  }
 
 model Profile {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -88,6 +88,18 @@ model Goal {
   description         String?
   isCompleted         Boolean           @default(false)
   createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  category    String   @default("General")
+  status      String   @default("InProgress")
+  dueDate     DateTime?
+
+  // S.M.A.R.T. components
+  specific    String
+  measurable  String
+  achievable  String
+  relevant    String
+  timeBound   String
 }
 
 model Notification {

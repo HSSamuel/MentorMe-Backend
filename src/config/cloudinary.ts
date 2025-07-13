@@ -12,9 +12,10 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
-    folder: "mentor-me-avatars",
-    allowedFormats: ["jpeg", "png", "jpg"],
-  } as any, // 'any' is used here to match the expected params type
+    folder: "mentor-me-attachments",
+    allowedFormats: ["jpeg", "png", "jpg", "pdf"],
+    resource_type: "auto",
+  } as any,
 });
 
 export { cloudinary, storage };

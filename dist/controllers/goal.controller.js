@@ -48,7 +48,7 @@ exports.getGoalsForMentorship = getGoalsForMentorship;
 // POST a new goal
 const createGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const userId = (0, getUserId_1.getUserId)(req);
-    const { mentorshipRequestId, title, description } = req.body;
+    const { mentorshipRequestId, title, description, category, dueDate, specific, measurable, achievable, relevant, timeBound, } = req.body;
     if (!userId) {
         res.status(401).json({ message: "Authentication error" });
         return;
@@ -67,11 +67,26 @@ const createGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             return;
         }
         const newGoal = yield prisma.goal.create({
-            data: { mentorshipRequestId, title, description },
+            data: {
+                title,
+                description: description || "",
+                category: category || "General",
+                dueDate: dueDate ? new Date(dueDate) : null,
+                specific: specific || "",
+                measurable: measurable || "",
+                achievable: achievable || "",
+                relevant: relevant || "",
+                timeBound: timeBound || "",
+                status: "InProgress",
+                mentorshipRequest: {
+                    connect: { id: mentorshipRequestId },
+                },
+            },
         });
         res.status(201).json(newGoal);
     }
     catch (error) {
+        console.error(error);
         res.status(500).json({ message: "Server error creating goal." });
     }
 });
@@ -87,11 +102,16 @@ const updateGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         return;
     }
     try {
-        const goal = yield prisma.goal.findUnique({
-            where: { id: goalId },
+        const goal = yield prisma.goal.findFirst({
+            where: {
+                id: goalId,
+                mentorshipRequest: {
+                    menteeId: userId,
+                },
+            },
             include: { mentorshipRequest: true },
         });
-        if (!goal || goal.mentorshipRequest.menteeId !== userId) {
+        if (!goal) {
             res
                 .status(404)
                 .json({ message: "Goal not found or you are not the mentee." });
@@ -105,7 +125,7 @@ const updateGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             io.emit("goalCompleted", {
                 goalId: updatedGoal.id,
                 menteeId: userId,
-                mentorId: goal.mentorshipRequest.mentorId
+                mentorId: goal.mentorshipRequest.mentorId,
             });
         }
         res.status(200).json(updatedGoal);
@@ -124,11 +144,15 @@ const deleteGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         return;
     }
     try {
-        const goal = yield prisma.goal.findUnique({
-            where: { id: goalId },
-            include: { mentorshipRequest: true },
+        const goal = yield prisma.goal.findFirst({
+            where: {
+                id: goalId,
+                mentorshipRequest: {
+                    menteeId: userId,
+                },
+            },
         });
-        if (!goal || goal.mentorshipRequest.menteeId !== userId) {
+        if (!goal) {
             res
                 .status(404)
                 .json({ message: "Goal not found or you are not the mentee." });

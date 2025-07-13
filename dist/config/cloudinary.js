@@ -14,8 +14,9 @@ cloudinary_1.v2.config({
 const storage = new multer_storage_cloudinary_1.CloudinaryStorage({
     cloudinary: cloudinary_1.v2,
     params: {
-        folder: "mentor-me-avatars",
-        allowedFormats: ["jpeg", "png", "jpg"],
-    }, // 'any' is used here to match the expected params type
+        folder: "mentor-me-attachments",
+        allowedFormats: ["jpeg", "png", "jpg", "pdf"],
+        resource_type: "auto",
+    },
 });
 exports.storage = storage;

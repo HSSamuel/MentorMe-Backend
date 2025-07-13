@@ -97,7 +97,6 @@ app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/ai", aiRoutes);
-app.use("/api", apiRouter);
 
 app.use(jsonErrorHandler);
 

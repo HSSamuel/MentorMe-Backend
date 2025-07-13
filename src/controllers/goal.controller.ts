@@ -49,7 +49,18 @@ export const createGoal = async (
   res: Response
 ): Promise<void> => {
   const userId = getUserId(req);
-  const { mentorshipRequestId, title, description } = req.body;
+  const {
+    mentorshipRequestId,
+    title,
+    description,
+    category,
+    dueDate,
+    specific,
+    measurable,
+    achievable,
+    relevant,
+    timeBound,
+  } = req.body;
 
   if (!userId) {
     res.status(401).json({ message: "Authentication error" });
@@ -72,11 +83,26 @@ export const createGoal = async (
     }
 
     const newGoal = await prisma.goal.create({
-      data: { mentorshipRequestId, title, description },
+      data: {
+        title,
+        description: description || "",
+        category: category || "General",
+        dueDate: dueDate ? new Date(dueDate) : null,
+        specific: specific || "",
+        measurable: measurable || "",
+        achievable: achievable || "",
+        relevant: relevant || "",
+        timeBound: timeBound || "",
+        status: "InProgress",
+        mentorshipRequest: {
+          connect: { id: mentorshipRequestId },
+        },
+      },
     });
 
     res.status(201).json(newGoal);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Server error creating goal." });
   }
 };
@@ -97,12 +123,17 @@ export const updateGoal = async (
   }
 
   try {
-    const goal = await prisma.goal.findUnique({
-      where: { id: goalId },
+    const goal = await prisma.goal.findFirst({
+      where: {
+        id: goalId,
+        mentorshipRequest: {
+          menteeId: userId,
+        },
+      },
       include: { mentorshipRequest: true },
     });
 
-    if (!goal || goal.mentorshipRequest.menteeId !== userId) {
+    if (!goal) {
       res
         .status(404)
         .json({ message: "Goal not found or you are not the mentee." });
@@ -113,13 +144,13 @@ export const updateGoal = async (
       where: { id: goalId },
       data: { title, description, isCompleted },
     });
-    
+
     if (isCompleted) {
-        io.emit("goalCompleted", { 
-            goalId: updatedGoal.id, 
-            menteeId: userId,
-            mentorId: goal.mentorshipRequest.mentorId 
-        });
+      io.emit("goalCompleted", {
+        goalId: updatedGoal.id,
+        menteeId: userId,
+        mentorId: goal.mentorshipRequest.mentorId,
+      });
     }
 
     res.status(200).json(updatedGoal);
@@ -142,12 +173,16 @@ export const deleteGoal = async (
   }
 
   try {
-    const goal = await prisma.goal.findUnique({
-      where: { id: goalId },
-      include: { mentorshipRequest: true },
+    const goal = await prisma.goal.findFirst({
+      where: {
+        id: goalId,
+        mentorshipRequest: {
+          menteeId: userId,
+        },
+      },
     });
 
-    if (!goal || goal.mentorshipRequest.menteeId !== userId) {
+    if (!goal) {
       res
         .status(404)
         .json({ message: "Goal not found or you are not the mentee." });
