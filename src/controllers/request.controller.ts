@@ -25,6 +25,21 @@ export const createRequest = async (
     return;
   }
   try {
+    // --- FIX: Check for an existing request ---
+    const existingRequest = await prisma.mentorshipRequest.findFirst({
+      where: {
+        menteeId,
+        mentorId,
+      },
+    });
+
+    if (existingRequest) {
+      res
+        .status(409) // 409 Conflict
+        .json({ message: "You have already sent a request to this mentor." });
+      return;
+    }
+
     const newRequest = await prisma.mentorshipRequest.create({
       data: { menteeId, mentorId, status: "PENDING" },
       include: { mentee: { include: { profile: true } } },
