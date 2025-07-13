@@ -34,6 +34,19 @@ const createRequest = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         return;
     }
     try {
+        // --- FIX: Check for an existing request ---
+        const existingRequest = yield prisma.mentorshipRequest.findFirst({
+            where: {
+                menteeId,
+                mentorId,
+            },
+        });
+        if (existingRequest) {
+            res
+                .status(409) // 409 Conflict
+                .json({ message: "You have already sent a request to this mentor." });
+            return;
+        }
         const newRequest = yield prisma.mentorshipRequest.create({
             data: { menteeId, mentorId, status: "PENDING" },
             include: { mentee: { include: { profile: true } } },
