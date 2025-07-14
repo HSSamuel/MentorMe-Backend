@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { PrismaClient, RequestStatus } from "@prisma/client";
+import { awardPoints } from "../services/gamification.service";
 
 const prisma = new PrismaClient();
 
@@ -136,13 +137,18 @@ export const updateRequestStatus = async (
       data: { status: status as RequestStatus },
     });
 
-    // If the request was accepted, create a conversation
+    // If the request was accepted, create a conversation and award points
     if (status === "ACCEPTED") {
       await prisma.conversation.create({
         data: {
           participantIDs: [request.mentorId, request.menteeId],
         },
       });
+
+      // --- Award points for accepting a mentorship ---
+      await awardPoints(request.mentorId, 25); // Mentor gets 25 points
+      await awardPoints(request.menteeId, 10); // Mentee gets 10 points
+
       // --- Create Notification for Mentee ---
       await prisma.notification.create({
         data: {

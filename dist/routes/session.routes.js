@@ -7,6 +7,10 @@ const auth_middleware_1 = require("../middleware/auth.middleware");
 const express_validator_1 = require("express-validator");
 const validateRequest_1 = require("../middleware/validateRequest");
 const router = (0, express_1.Router)();
+// NEW: Mentor gets their own availability
+router.get("/availability/me", auth_middleware_1.authMiddleware, auth_middleware_1.mentorMiddleware, session_controller_1.getAvailability);
+// NEW: User gets a specific mentor's availability for booking
+router.get("/availability/:mentorId", auth_middleware_1.authMiddleware, [(0, express_validator_1.param)("mentorId").isMongoId().withMessage("Invalid mentor ID")], validateRequest_1.validateRequest, session_controller_1.getMentorAvailability);
 // Mentor: Set weekly availability
 router.post("/availability", auth_middleware_1.authMiddleware, auth_middleware_1.mentorMiddleware, [(0, express_validator_1.body)("availability").isArray().withMessage("Availability must be an array")], validateRequest_1.validateRequest, session_controller_1.setAvailability);
 // Mentee: Book a new session

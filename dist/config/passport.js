@@ -26,33 +26,44 @@ passport_1.default.use(new passport_google_oauth20_1.Strategy({
 }, (accessToken, refreshToken, profile, done) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     try {
+        const userEmail = (_a = profile.emails) === null || _a === void 0 ? void 0 : _a[0].value;
+        const googleId = profile.id;
+        const displayName = profile.displayName;
+        // Ensure an email address is returned from Google, which is required by your schema.
+        if (!userEmail) {
+            return done(new Error("No email address found from Google profile."), false);
+        }
+        // 1. Find user by their unique Google ID first. This handles a returning user.
         let user = yield prisma.user.findUnique({
-            where: { email: (_a = profile.emails) === null || _a === void 0 ? void 0 : _a[0].value },
+            where: { googleId: googleId },
         });
         if (user) {
-            // User exists, link googleId if not present
-            if (!user.googleId) {
-                user = yield prisma.user.update({
-                    where: { id: user.id },
-                    data: { googleId: profile.id },
-                });
-            }
+            // If user is found, this is a login. Return the user.
             return done(null, user);
         }
-        // Create new user
+        // 2. If no user with that Google ID, check if the email is already in use.
+        // This handles a user who first signed up with email/password and now uses Google.
+        user = yield prisma.user.findUnique({
+            where: { email: userEmail },
+        });
+        if (user) {
+            // User exists, so link their Google ID to the existing account.
+            user = yield prisma.user.update({
+                where: { id: user.id },
+                data: { googleId: googleId },
+            });
+            return done(null, user);
+        }
+        // 3. If no user is found by Google ID or email, it's a new user. Create them.
         const newUser = yield prisma.user.create({
             data: {
-                email: profile.emails[0].value,
-                googleId: profile.id,
-                // Assuming the password can be null for social logins
-                // You might need to adjust your Prisma schema for this
-            },
-        });
-        // Create a basic profile for the new user
-        yield prisma.profile.create({
-            data: {
-                userId: newUser.id,
-                name: profile.displayName,
+                email: userEmail,
+                googleId: googleId,
+                profile: {
+                    create: {
+                        name: displayName,
+                    },
+                },
             },
         });
         return done(null, newUser);
@@ -61,41 +72,45 @@ passport_1.default.use(new passport_google_oauth20_1.Strategy({
         return done(error, false);
     }
 })));
-// Facebook Strategy with enableProof
+// Facebook Strategy with the same robust logic
 passport_1.default.use(new passport_facebook_1.Strategy({
     clientID: process.env.FACEBOOK_APP_ID,
     clientSecret: process.env.FACEBOOK_APP_SECRET,
     callbackURL: "/api/auth/facebook/callback",
     profileFields: ["id", "displayName", "emails"],
-    enableProof: true, // Add this line
+    enableProof: true,
 }, (accessToken, refreshToken, profile, done) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     try {
+        const userEmail = (_a = profile.emails) === null || _a === void 0 ? void 0 : _a[0].value;
+        if (!userEmail) {
+            return done(new Error("No email address found from Facebook profile."), false);
+        }
         let user = yield prisma.user.findUnique({
-            where: { email: (_a = profile.emails) === null || _a === void 0 ? void 0 : _a[0].value },
+            where: { facebookId: profile.id },
         });
         if (user) {
-            // User exists, link facebookId if not present
-            if (!user.facebookId) {
-                user = yield prisma.user.update({
-                    where: { id: user.id },
-                    data: { facebookId: profile.id },
-                });
-            }
             return done(null, user);
         }
-        // Create new user
+        user = yield prisma.user.findUnique({
+            where: { email: userEmail },
+        });
+        if (user) {
+            user = yield prisma.user.update({
+                where: { id: user.id },
+                data: { facebookId: profile.id },
+            });
+            return done(null, user);
+        }
         const newUser = yield prisma.user.create({
             data: {
-                email: profile.emails[0].value,
+                email: userEmail,
                 facebookId: profile.id,
-            },
-        });
-        // Create a basic profile for the new user
-        yield prisma.profile.create({
-            data: {
-                userId: newUser.id,
-                name: profile.displayName,
+                profile: {
+                    create: {
+                        name: profile.displayName,
+                    },
+                },
             },
         });
         return done(null, newUser);

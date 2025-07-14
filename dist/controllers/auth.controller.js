@@ -45,15 +45,25 @@ const getUserId = (req) => {
 };
 const register = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { email, password, role } = req.body;
-    const passwordStrength = (0, zxcvbn_1.default)(password);
-    if (passwordStrength.score < 3) {
-        res.status(400).json({
-            message: "Password is too weak. Please choose a stronger password.",
-            suggestions: passwordStrength.feedback.suggestions,
-        });
-        return;
-    }
+    // --- FIX: Check if a user with this email already exists ---
     try {
+        const existingUser = yield prisma.user.findUnique({
+            where: { email },
+        });
+        if (existingUser) {
+            res
+                .status(409) // 409 Conflict is a more appropriate status code
+                .json({ message: "A user with this email address already exists." });
+            return;
+        }
+        const passwordStrength = (0, zxcvbn_1.default)(password);
+        if (passwordStrength.score < 3) {
+            res.status(400).json({
+                message: "Password is too weak. Please choose a stronger password.",
+                suggestions: passwordStrength.feedback.suggestions,
+            });
+            return;
+        }
         const hashedPassword = yield bcryptjs_1.default.hash(password, 12);
         // Create both the user and their profile in a single transaction
         const user = yield prisma.user.create({
@@ -84,7 +94,6 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { email, password } = req.body;
     try {
         const user = yield prisma.user.findUnique({ where: { email } });
-        // Corrected logic: check for user and user.password existence
         if (!user ||
             !user.password ||
             !(yield bcryptjs_1.default.compare(password, user.password))) {
@@ -110,7 +119,6 @@ const getMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const user = yield prisma.user.findUnique({
             where: { id: userId },
-            // Corrected: Added googleAccessToken and googleRefreshToken to the select query
             select: {
                 id: true,
                 email: true,
@@ -132,7 +140,6 @@ const forgotPassword = (req, res) => __awaiter(void 0, void 0, void 0, function*
     try {
         const user = yield prisma.user.findUnique({ where: { email } });
         if (!user) {
-            // Don't reveal that the user doesn't exist for security reasons
             res.status(200).json({
                 message: "If a user with that email exists, a password reset link has been sent.",
             });

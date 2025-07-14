@@ -88,11 +88,11 @@ export const createGoal = async (
         description: description || "",
         category: category || "General",
         dueDate: dueDate ? new Date(dueDate) : null,
-        specific: specific || "",
-        measurable: measurable || "",
-        achievable: achievable || "",
-        relevant: relevant || "",
-        timeBound: timeBound || "",
+        specific, // Now correctly saved
+        measurable, // Now correctly saved
+        achievable, // Now correctly saved
+        relevant, // Now correctly saved
+        timeBound, // Now correctly saved
         status: "InProgress",
         mentorshipRequest: {
           connect: { id: mentorshipRequestId },
@@ -196,5 +196,33 @@ export const deleteGoal = async (
     res.status(204).send(); // No content
   } catch (error) {
     res.status(500).json({ message: "Server error deleting goal." });
+  }
+};
+
+// GET all goals for the logged-in mentee
+export const getAllMyGoals = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const userId = getUserId(req);
+
+  if (!userId) {
+    res.status(401).json({ message: "Authentication error" });
+    return;
+  }
+
+  try {
+    const goals = await prisma.goal.findMany({
+      where: {
+        mentorshipRequest: {
+          menteeId: userId,
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.status(200).json(goals);
+  } catch (error) {
+    res.status(500).json({ message: "Server error fetching goals." });
   }
 };

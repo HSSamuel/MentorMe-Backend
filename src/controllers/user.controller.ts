@@ -95,61 +95,14 @@ export const getAvailableSkills = async (
   res.status(200).json(skills);
 };
 
-// PUT (update or create) the user's own profile, including avatar
-export const updateMyProfile = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
-  const userId = getUserId(req);
-  if (!userId) {
-    res.status(401).json({ message: "Authentication error" });
-    return;
-  }
-
-  const { name, bio, skills, goals } = req.body;
-  let avatarUrl: string | undefined = undefined;
-
-  // Get the file path from Cloudinary's response
-  if (req.file) {
-    avatarUrl = req.file.path;
-  }
-
-  try {
-    const profile = await prisma.profile.upsert({
-      where: { userId },
-      update: {
-        name,
-        bio,
-        skills: skills || [],
-        goals,
-        ...(avatarUrl && { avatarUrl }),
-      },
-      create: {
-        userId,
-        name,
-        bio,
-        skills: skills || [],
-        goals,
-        ...(avatarUrl && { avatarUrl }),
-      },
-    });
-    res.status(200).json(profile);
-  } catch (error) {
-    console.error("Error updating profile:", error);
-    res.status(500).json({ message: "Error updating profile" });
-  }
-};
-
 // GET statistics for a mentor (Optimized Version)
 export const getMentorStats = async (
   req: Request,
   res: Response
 ): Promise<void> => {
-  const userId = getUserId(req);
-  if (!userId) {
-    res.status(401).json({ message: "Authentication error" });
-    return;
-  }
+  // Use the ID from the URL parameters
+  const { id } = req.params;
+
   try {
     // A single transaction to run all queries concurrently on the database
     const [
@@ -160,19 +113,19 @@ export const getMentorStats = async (
       reviewAggregation,
     ] = await prisma.$transaction([
       prisma.mentorshipRequest.count({
-        where: { mentorId: userId, status: "ACCEPTED" },
+        where: { mentorId: id, status: "ACCEPTED" },
       }),
       prisma.mentorshipRequest.count({
-        where: { mentorId: userId, status: "PENDING" },
+        where: { mentorId: id, status: "PENDING" },
       }),
       prisma.session.count({
-        where: { mentorId: userId, date: { gte: new Date() } },
+        where: { mentorId: id, date: { gte: new Date() } },
       }),
       prisma.session.count({
-        where: { mentorId: userId, date: { lt: new Date() } },
+        where: { mentorId: id, date: { lt: new Date() } },
       }),
       prisma.review.aggregate({
-        where: { mentorshipRequest: { mentorId: userId } },
+        where: { mentorshipRequest: { mentorId: id } },
         _avg: { rating: true },
       }),
     ]);
@@ -202,26 +155,22 @@ export const getMenteeStats = async (
     return;
   }
   try {
-    const [
-        mentorCount,
-        pendingRequests,
-        upcomingSessions,
-        completedSessions,
-    ] = await prisma.$transaction([
+    const [mentorCount, pendingRequests, upcomingSessions, completedSessions] =
+      await prisma.$transaction([
         prisma.mentorshipRequest.count({
-            where: { menteeId: userId, status: "ACCEPTED" },
+          where: { menteeId: userId, status: "ACCEPTED" },
         }),
         prisma.mentorshipRequest.count({
-            where: { menteeId: userId, status: "PENDING" },
+          where: { menteeId: userId, status: "PENDING" },
         }),
         prisma.session.count({
-            where: { menteeId: userId, date: { gte: new Date() } },
+          where: { menteeId: userId, date: { gte: new Date() } },
         }),
         prisma.session.count({
-            where: { menteeId: userId, date: { lt: new Date() } },
+          where: { menteeId: userId, date: { lt: new Date() } },
         }),
-    ]);
-    
+      ]);
+
     res.status(200).json({
       mentorCount,
       pendingRequests,
@@ -230,5 +179,103 @@ export const getMenteeStats = async (
     });
   } catch (error) {
     res.status(500).json({ message: "Error fetching mentee stats." });
+  }
+};
+
+export const updateMyProfile = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const userId = getUserId(req);
+  if (!userId) {
+    res.status(401).json({ message: "Authentication error" });
+    return;
+  }
+
+  const { name, bio, skills, goals } = req.body;
+  let avatarUrl: string | undefined = undefined;
+
+  // Get the file path from Cloudinary's response if it exists
+  if (req.file) {
+    avatarUrl = req.file.path;
+  }
+
+  try {
+    const profile = await prisma.profile.upsert({
+      where: { userId },
+      update: {
+        name,
+        bio,
+        skills: skills || [],
+        goals,
+        ...(avatarUrl && { avatarUrl }),
+      },
+      create: {
+        userId,
+        name,
+        bio,
+        skills: skills || [],
+        goals,
+        ...(avatarUrl && { avatarUrl }),
+      },
+    });
+
+    // Emit a socket event if the avatar was updated
+    if (avatarUrl) {
+      const io = req.app.locals.io;
+      io.emit("avatarUpdated", { userId, avatarUrl });
+    }
+
+    res.status(200).json(profile);
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    res.status(500).json({ message: "Error updating profile" });
+  }
+};
+
+// GET recommended mentors for the current mentee
+export const getRecommendedMentors = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const userId = getUserId(req);
+  if (!userId) {
+    res.status(401).json({ message: "Authentication error" });
+    return;
+  }
+
+  try {
+    const menteeProfile = await prisma.profile.findUnique({
+      where: { userId },
+      select: { skills: true, goals: true },
+    });
+
+    if (!menteeProfile || menteeProfile.skills.length === 0) {
+      // Return an empty array if the mentee has no skills listed
+      res.status(200).json([]);
+      return;
+    }
+
+    // Find mentors who have at least one skill that matches the mentee's skills
+    const recommendedMentors = await prisma.user.findMany({
+      where: {
+        role: "MENTOR",
+        id: { not: userId }, // Ensure users don't see themselves
+        profile: {
+          skills: {
+            hasSome: menteeProfile.skills,
+          },
+        },
+      },
+      take: 3, // Limit to 3 recommendations for the dashboard
+      select: {
+        id: true,
+        profile: true,
+      },
+    });
+
+    res.status(200).json(recommendedMentors);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching recommended mentors." });
   }
 };

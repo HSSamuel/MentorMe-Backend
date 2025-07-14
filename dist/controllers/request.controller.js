@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateRequestStatus = exports.getReceivedRequests = exports.getSentRequests = exports.createRequest = void 0;
 const client_1 = require("@prisma/client");
+const gamification_service_1 = require("../services/gamification.service");
 const prisma = new client_1.PrismaClient();
 const getUserIdForRequest = (req) => {
     if (!req.user)
@@ -133,13 +134,16 @@ const updateRequestStatus = (req, res) => __awaiter(void 0, void 0, void 0, func
             where: { id },
             data: { status: status },
         });
-        // If the request was accepted, create a conversation
+        // If the request was accepted, create a conversation and award points
         if (status === "ACCEPTED") {
             yield prisma.conversation.create({
                 data: {
                     participantIDs: [request.mentorId, request.menteeId],
                 },
             });
+            // --- Award points for accepting a mentorship ---
+            yield (0, gamification_service_1.awardPoints)(request.mentorId, 25); // Mentor gets 25 points
+            yield (0, gamification_service_1.awardPoints)(request.menteeId, 10); // Mentee gets 10 points
             // --- Create Notification for Mentee ---
             yield prisma.notification.create({
                 data: {

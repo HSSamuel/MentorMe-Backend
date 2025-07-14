@@ -9,19 +9,101 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.submitFeedback = exports.getMenteeSessions = exports.getMentorSessions = exports.createSession = exports.setAvailability = void 0;
+exports.submitFeedback = exports.getMenteeSessions = exports.getMentorSessions = exports.createSession = exports.setAvailability = exports.getMentorAvailability = exports.getAvailability = void 0;
 const client_1 = require("@prisma/client");
 const calendar_service_1 = require("../services/calendar.service");
 const getUserId_1 = require("../utils/getUserId");
+const gamification_service_1 = require("../services/gamification.service");
 const prisma = new client_1.PrismaClient();
 const getUserRole = (req) => {
     if (!req.user)
         return null;
     return req.user.role;
 };
+// NEW: Get the logged-in mentor's own availability
+const getAvailability = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const mentorId = (0, getUserId_1.getUserId)(req);
+    if (!mentorId) {
+        res.status(401).json({ message: "Authentication error" });
+        return;
+    }
+    try {
+        const availability = yield prisma.availability.findMany({
+            where: { mentorId },
+        });
+        res.status(200).json(availability);
+    }
+    catch (error) {
+        res.status(500).json({ message: "Error fetching availability." });
+    }
+});
+exports.getAvailability = getAvailability;
+// NEW: Get a specific mentor's availability and generate slots for the next 4 weeks
+const getMentorAvailability = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { mentorId } = req.params;
+    try {
+        const weeklyAvailability = yield prisma.availability.findMany({
+            where: { mentorId },
+        });
+        const bookedSessions = yield prisma.session.findMany({
+            where: {
+                mentorId,
+                date: { gte: new Date() },
+            },
+            select: { date: true },
+        });
+        const bookedSlots = new Set(bookedSessions.map((s) => s.date.toISOString()));
+        const dayMap = {
+            Sunday: 0,
+            Monday: 1,
+            Tuesday: 2,
+            Wednesday: 3,
+            Thursday: 4,
+            Friday: 5,
+            Saturday: 6,
+        };
+        const availableSlots = [];
+        const today = new Date();
+        for (let i = 0; i < 28; i++) {
+            // Generate slots for the next 4 weeks
+            const currentDate = new Date(today);
+            currentDate.setDate(today.getDate() + i);
+            const dayOfWeek = currentDate.getDay();
+            for (const slot of weeklyAvailability) {
+                if (dayMap[slot.day] === dayOfWeek) {
+                    const [startHour, startMinute] = slot.startTime
+                        .split(":")
+                        .map(Number);
+                    const [endHour, endMinute] = slot.endTime.split(":").map(Number);
+                    let currentHour = startHour;
+                    let currentMinute = startMinute;
+                    while (currentHour < endHour ||
+                        (currentHour === endHour && currentMinute < endMinute)) {
+                        const slotTime = new Date(currentDate);
+                        slotTime.setHours(currentHour, currentMinute, 0, 0);
+                        if (!bookedSlots.has(slotTime.toISOString())) {
+                            availableSlots.push({
+                                id: `${mentorId}-${slotTime.toISOString()}`,
+                                time: slotTime.toISOString(),
+                            });
+                        }
+                        // Assuming 1-hour slots, adjust if necessary
+                        currentHour += 1;
+                    }
+                }
+            }
+        }
+        res.status(200).json(availableSlots);
+    }
+    catch (error) {
+        console.error("Error fetching mentor availability slots:", error);
+        res.status(500).json({ message: "Error fetching availability slots." });
+    }
+});
+exports.getMentorAvailability = getMentorAvailability;
 const setAvailability = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const mentorId = (0, getUserId_1.getUserId)(req);
-    const io = req.app.locals.io; // This is the correct way to access io
+    const io = req.app.locals.io;
     if (!mentorId) {
         res.status(401).json({ message: "Authentication error" });
         return;
@@ -171,6 +253,8 @@ const submitFeedback = (req, res) => __awaiter(void 0, void 0, void 0, function*
             where: { id },
             data: dataToUpdate,
         });
+        // Award points for submitting feedback
+        yield (0, gamification_service_1.awardPoints)(userId, 15);
         res.status(200).json(updatedSession);
     }
     catch (error) {

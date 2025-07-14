@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteGoal = exports.updateGoal = exports.createGoal = exports.getGoalsForMentorship = void 0;
+exports.getAllMyGoals = exports.deleteGoal = exports.updateGoal = exports.createGoal = exports.getGoalsForMentorship = void 0;
 const client_1 = require("@prisma/client");
 const getUserId_1 = require("../utils/getUserId");
 const prisma = new client_1.PrismaClient();
@@ -72,11 +72,11 @@ const createGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 description: description || "",
                 category: category || "General",
                 dueDate: dueDate ? new Date(dueDate) : null,
-                specific: specific || "",
-                measurable: measurable || "",
-                achievable: achievable || "",
-                relevant: relevant || "",
-                timeBound: timeBound || "",
+                specific, // Now correctly saved
+                measurable, // Now correctly saved
+                achievable, // Now correctly saved
+                relevant, // Now correctly saved
+                timeBound, // Now correctly saved
                 status: "InProgress",
                 mentorshipRequest: {
                     connect: { id: mentorshipRequestId },
@@ -168,3 +168,26 @@ const deleteGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     }
 });
 exports.deleteGoal = deleteGoal;
+// GET all goals for the logged-in mentee
+const getAllMyGoals = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const userId = (0, getUserId_1.getUserId)(req);
+    if (!userId) {
+        res.status(401).json({ message: "Authentication error" });
+        return;
+    }
+    try {
+        const goals = yield prisma.goal.findMany({
+            where: {
+                mentorshipRequest: {
+                    menteeId: userId,
+                },
+            },
+            orderBy: { createdAt: "desc" },
+        });
+        res.status(200).json(goals);
+    }
+    catch (error) {
+        res.status(500).json({ message: "Server error fetching goals." });
+    }
+});
+exports.getAllMyGoals = getAllMyGoals;

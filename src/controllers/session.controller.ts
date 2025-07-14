@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
 import { createCalendarEvent } from "../services/calendar.service";
 import { getUserId } from "../utils/getUserId";
+import { awardPoints } from "../services/gamification.service";
 
 const prisma = new PrismaClient();
 
@@ -10,12 +11,110 @@ const getUserRole = (req: Request): string | null => {
   return (req.user as any).role as string;
 };
 
+// NEW: Get the logged-in mentor's own availability
+export const getAvailability = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const mentorId = getUserId(req);
+  if (!mentorId) {
+    res.status(401).json({ message: "Authentication error" });
+    return;
+  }
+
+  try {
+    const availability = await prisma.availability.findMany({
+      where: { mentorId },
+    });
+    res.status(200).json(availability);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching availability." });
+  }
+};
+
+// NEW: Get a specific mentor's availability and generate slots for the next 4 weeks
+export const getMentorAvailability = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { mentorId } = req.params;
+  try {
+    const weeklyAvailability = await prisma.availability.findMany({
+      where: { mentorId },
+    });
+
+    const bookedSessions = await prisma.session.findMany({
+      where: {
+        mentorId,
+        date: { gte: new Date() },
+      },
+      select: { date: true },
+    });
+    const bookedSlots = new Set(
+      bookedSessions.map((s) => s.date.toISOString())
+    );
+
+    const dayMap: { [key: string]: number } = {
+      Sunday: 0,
+      Monday: 1,
+      Tuesday: 2,
+      Wednesday: 3,
+      Thursday: 4,
+      Friday: 5,
+      Saturday: 6,
+    };
+
+    const availableSlots = [];
+    const today = new Date();
+
+    for (let i = 0; i < 28; i++) {
+      // Generate slots for the next 4 weeks
+      const currentDate = new Date(today);
+      currentDate.setDate(today.getDate() + i);
+      const dayOfWeek = currentDate.getDay();
+
+      for (const slot of weeklyAvailability) {
+        if (dayMap[slot.day] === dayOfWeek) {
+          const [startHour, startMinute] = slot.startTime
+            .split(":")
+            .map(Number);
+          const [endHour, endMinute] = slot.endTime.split(":").map(Number);
+
+          let currentHour = startHour;
+          let currentMinute = startMinute;
+
+          while (
+            currentHour < endHour ||
+            (currentHour === endHour && currentMinute < endMinute)
+          ) {
+            const slotTime = new Date(currentDate);
+            slotTime.setHours(currentHour, currentMinute, 0, 0);
+
+            if (!bookedSlots.has(slotTime.toISOString())) {
+              availableSlots.push({
+                id: `${mentorId}-${slotTime.toISOString()}`,
+                time: slotTime.toISOString(),
+              });
+            }
+            // Assuming 1-hour slots, adjust if necessary
+            currentHour += 1;
+          }
+        }
+      }
+    }
+    res.status(200).json(availableSlots);
+  } catch (error) {
+    console.error("Error fetching mentor availability slots:", error);
+    res.status(500).json({ message: "Error fetching availability slots." });
+  }
+};
+
 export const setAvailability = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   const mentorId = getUserId(req);
-  const io = req.app.locals.io; // This is the correct way to access io
+  const io = req.app.locals.io;
 
   if (!mentorId) {
     res.status(401).json({ message: "Authentication error" });
@@ -185,6 +284,10 @@ export const submitFeedback = async (
       where: { id },
       data: dataToUpdate,
     });
+
+    // Award points for submitting feedback
+    await awardPoints(userId, 15);
+
     res.status(200).json(updatedSession);
   } catch (error) {
     res.status(500).json({ message: "Error submitting feedback." });

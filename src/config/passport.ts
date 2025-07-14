@@ -16,36 +16,53 @@ passport.use(
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
+        const userEmail = profile.emails?.[0].value;
+        const googleId = profile.id;
+        const displayName = profile.displayName;
+
+        // Ensure an email address is returned from Google, which is required by your schema.
+        if (!userEmail) {
+          return done(
+            new Error("No email address found from Google profile."),
+            false
+          );
+        }
+
+        // 1. Find user by their unique Google ID first. This handles a returning user.
         let user = await prisma.user.findUnique({
-          where: { email: profile.emails?.[0].value },
+          where: { googleId: googleId },
         });
 
         if (user) {
-          // User exists, link googleId if not present
-          if (!user.googleId) {
-            user = await prisma.user.update({
-              where: { id: user.id },
-              data: { googleId: profile.id },
-            });
-          }
+          // If user is found, this is a login. Return the user.
           return done(null, user);
         }
 
-        // Create new user
-        const newUser = await prisma.user.create({
-          data: {
-            email: profile.emails![0].value,
-            googleId: profile.id,
-            // Assuming the password can be null for social logins
-            // You might need to adjust your Prisma schema for this
-          },
+        // 2. If no user with that Google ID, check if the email is already in use.
+        // This handles a user who first signed up with email/password and now uses Google.
+        user = await prisma.user.findUnique({
+          where: { email: userEmail },
         });
 
-        // Create a basic profile for the new user
-        await prisma.profile.create({
+        if (user) {
+          // User exists, so link their Google ID to the existing account.
+          user = await prisma.user.update({
+            where: { id: user.id },
+            data: { googleId: googleId },
+          });
+          return done(null, user);
+        }
+
+        // 3. If no user is found by Google ID or email, it's a new user. Create them.
+        const newUser = await prisma.user.create({
           data: {
-            userId: newUser.id,
-            name: profile.displayName,
+            email: userEmail,
+            googleId: googleId,
+            profile: {
+              create: {
+                name: displayName,
+              },
+            },
           },
         });
 
@@ -57,7 +74,7 @@ passport.use(
   )
 );
 
-// Facebook Strategy with enableProof
+// Facebook Strategy with the same robust logic
 passport.use(
   new FacebookStrategy(
     {
@@ -65,38 +82,47 @@ passport.use(
       clientSecret: process.env.FACEBOOK_APP_SECRET!,
       callbackURL: "/api/auth/facebook/callback",
       profileFields: ["id", "displayName", "emails"],
-      enableProof: true, // Add this line
+      enableProof: true,
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
+        const userEmail = profile.emails?.[0].value;
+        if (!userEmail) {
+          return done(
+            new Error("No email address found from Facebook profile."),
+            false
+          );
+        }
+
         let user = await prisma.user.findUnique({
-          where: { email: profile.emails?.[0].value },
+          where: { facebookId: profile.id },
         });
 
         if (user) {
-          // User exists, link facebookId if not present
-          if (!user.facebookId) {
-            user = await prisma.user.update({
-              where: { id: user.id },
-              data: { facebookId: profile.id },
-            });
-          }
           return done(null, user);
         }
 
-        // Create new user
-        const newUser = await prisma.user.create({
-          data: {
-            email: profile.emails![0].value,
-            facebookId: profile.id,
-          },
+        user = await prisma.user.findUnique({
+          where: { email: userEmail },
         });
 
-        // Create a basic profile for the new user
-        await prisma.profile.create({
+        if (user) {
+          user = await prisma.user.update({
+            where: { id: user.id },
+            data: { facebookId: profile.id },
+          });
+          return done(null, user);
+        }
+
+        const newUser = await prisma.user.create({
           data: {
-            userId: newUser.id,
-            name: profile.displayName,
+            email: userEmail,
+            facebookId: profile.id,
+            profile: {
+              create: {
+                name: profile.displayName,
+              },
+            },
           },
         });
 

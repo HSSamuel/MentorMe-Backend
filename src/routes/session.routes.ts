@@ -3,6 +3,8 @@
 import { Router } from "express";
 import {
   setAvailability,
+  getAvailability, // Import new function
+  getMentorAvailability, // Import new function
   createSession,
   getMentorSessions,
   getMenteeSessions,
@@ -17,6 +19,23 @@ import { body, param } from "express-validator";
 import { validateRequest } from "../middleware/validateRequest";
 
 const router = Router();
+
+// NEW: Mentor gets their own availability
+router.get(
+  "/availability/me",
+  authMiddleware,
+  mentorMiddleware,
+  getAvailability
+);
+
+// NEW: User gets a specific mentor's availability for booking
+router.get(
+  "/availability/:mentorId",
+  authMiddleware,
+  [param("mentorId").isMongoId().withMessage("Invalid mentor ID")],
+  validateRequest,
+  getMentorAvailability
+);
 
 // Mentor: Set weekly availability
 router.post(

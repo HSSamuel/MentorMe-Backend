@@ -55,9 +55,7 @@ const initializeSocket = (io) => {
                         conversation: { include: { participants: true } },
                     },
                 });
-                // Broadcast the new message to all clients in the conversation room
                 io.to(conversationId).emit("receiveMessage", message);
-                // --- Create and Push Notification for the Recipient ---
                 const recipient = message.conversation.participants.find((p) => p.id !== user.userId);
                 if (recipient) {
                     const notification = yield prisma.notification.create({
@@ -68,7 +66,6 @@ const initializeSocket = (io) => {
                             link: `/messages`,
                         },
                     });
-                    // Emit a real-time event to the recipient's personal room
                     io.to(recipient.id).emit("newNotification", notification);
                 }
             }
@@ -77,10 +74,9 @@ const initializeSocket = (io) => {
                 socket.emit("messageError", { message: "Could not send message." });
             }
         }));
-        // Listen for goal completion
         socket.on("goalCompleted", (data) => __awaiter(void 0, void 0, void 0, function* () {
             var _a;
-            const { goalId, menteeId, mentorId } = data;
+            const { menteeId, mentorId } = data;
             const mentee = yield prisma.user.findUnique({
                 where: { id: menteeId },
                 include: { profile: true },
@@ -91,13 +87,12 @@ const initializeSocket = (io) => {
                         userId: mentorId,
                         type: "GOAL_COMPLETED",
                         message: `${((_a = mentee.profile) === null || _a === void 0 ? void 0 : _a.name) || "A mentee"} has completed a goal!`,
-                        link: `/mentors`, // Or a more specific link
+                        link: `/mentors`,
                     },
                 });
                 io.to(mentorId).emit("newNotification", notification);
             }
         }));
-        // Listen for availability updates
         socket.on("availabilityUpdated", (data) => __awaiter(void 0, void 0, void 0, function* () {
             var _a;
             const { mentorId } = data;
@@ -123,8 +118,37 @@ const initializeSocket = (io) => {
                 }
             }
         }));
+        // --- WebRTC Signaling Events ---
+        socket.on("join-room", (roomId) => {
+            socket.join(roomId);
+            socket.to(roomId).emit("user-joined", socket.id);
+        });
+        socket.on("offer", (payload) => {
+            io.to(payload.target).emit("offer", {
+                socketId: socket.id,
+                offer: payload.offer,
+            });
+        });
+        socket.on("answer", (payload) => {
+            io.to(payload.target).emit("answer", {
+                socketId: socket.id,
+                answer: payload.answer,
+            });
+        });
+        socket.on("ice-candidate", (payload) => {
+            io.to(payload.target).emit("ice-candidate", {
+                socketId: socket.id,
+                candidate: payload.candidate,
+            });
+        });
         socket.on("disconnect", () => {
             console.log(`🔴 User disconnected: ${socket.id}`);
+            // Notify other users in the rooms that this user was in
+            socket.rooms.forEach((room) => {
+                if (room !== socket.id) {
+                    socket.to(room).emit("user-left", socket.id);
+                }
+            });
         });
     });
 };

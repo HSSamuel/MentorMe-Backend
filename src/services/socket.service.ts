@@ -54,10 +54,8 @@ export const initializeSocket = (io: Server) => {
             },
           });
 
-          // Broadcast the new message to all clients in the conversation room
           io.to(conversationId).emit("receiveMessage", message);
 
-          // --- Create and Push Notification for the Recipient ---
           const recipient = message.conversation.participants.find(
             (p) => p.id !== user.userId
           );
@@ -72,7 +70,6 @@ export const initializeSocket = (io: Server) => {
                 link: `/messages`,
               },
             });
-            // Emit a real-time event to the recipient's personal room
             io.to(recipient.id).emit("newNotification", notification);
           }
         } catch (error) {
@@ -82,11 +79,10 @@ export const initializeSocket = (io: Server) => {
       }
     );
 
-    // Listen for goal completion
     socket.on(
       "goalCompleted",
       async (data: { goalId: string; menteeId: string; mentorId: string }) => {
-        const { goalId, menteeId, mentorId } = data;
+        const { menteeId, mentorId } = data;
         const mentee = await prisma.user.findUnique({
           where: { id: menteeId },
           include: { profile: true },
@@ -100,7 +96,7 @@ export const initializeSocket = (io: Server) => {
               message: `${
                 mentee.profile?.name || "A mentee"
               } has completed a goal!`,
-              link: `/mentors`, // Or a more specific link
+              link: `/mentors`,
             },
           });
           io.to(mentorId).emit("newNotification", notification);
@@ -108,7 +104,6 @@ export const initializeSocket = (io: Server) => {
       }
     );
 
-    // Listen for availability updates
     socket.on("availabilityUpdated", async (data: { mentorId: string }) => {
       const { mentorId } = data;
       const mentor = await prisma.user.findUnique({
@@ -138,8 +133,44 @@ export const initializeSocket = (io: Server) => {
       }
     });
 
+    // --- WebRTC Signaling Events ---
+    socket.on("join-room", (roomId: string) => {
+      socket.join(roomId);
+      socket.to(roomId).emit("user-joined", socket.id);
+    });
+
+    socket.on("offer", (payload: { target: string; offer: any }) => {
+      io.to(payload.target).emit("offer", {
+        socketId: socket.id,
+        offer: payload.offer,
+      });
+    });
+
+    socket.on("answer", (payload: { target: string; answer: any }) => {
+      io.to(payload.target).emit("answer", {
+        socketId: socket.id,
+        answer: payload.answer,
+      });
+    });
+
+    socket.on(
+      "ice-candidate",
+      (payload: { target: string; candidate: any }) => {
+        io.to(payload.target).emit("ice-candidate", {
+          socketId: socket.id,
+          candidate: payload.candidate,
+        });
+      }
+    );
+
     socket.on("disconnect", () => {
       console.log(`🔴 User disconnected: ${socket.id}`);
+      // Notify other users in the rooms that this user was in
+      socket.rooms.forEach((room) => {
+        if (room !== socket.id) {
+          socket.to(room).emit("user-left", socket.id);
+        }
+      });
     });
   });
 };
