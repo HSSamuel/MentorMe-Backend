@@ -8,30 +8,28 @@ import {
 } from "../controllers/goal.controller";
 import {
   authMiddleware,
-  menteeMiddleware, // Import menteeMiddleware
+  menteeMiddleware,
 } from "../middleware/auth.middleware";
 import { body, param } from "express-validator";
 import { validateRequest } from "../middleware/validateRequest";
 
 const router = Router();
 
-// This route now correctly uses menteeMiddleware
 router.get("/", authMiddleware, menteeMiddleware, getAllMyGoals);
 
-// This route is for viewing goals within a specific mentorship, accessible by both mentor and mentee
+// FIX: Standardize parameter to '/:id'
 router.get(
-  "/:mentorshipId",
+  "/mentorship/:id",
   authMiddleware,
-  [param("mentorshipId").isMongoId().withMessage("Invalid mentorship ID")],
+  [param("id").isMongoId().withMessage("Invalid mentorship ID")],
   validateRequest,
   getGoalsForMentorship
 );
 
-// Create a new goal - This now correctly uses menteeMiddleware
 router.post(
   "/",
   authMiddleware,
-  menteeMiddleware, // This was the missing piece
+  menteeMiddleware,
   [
     body("mentorshipRequestId")
       .isMongoId()
@@ -53,29 +51,29 @@ router.post(
   createGoal
 );
 
-// Update a goal - Only the mentee who owns the goal can update it
+// FIX: Standardize parameter to '/:id' and validate 'status' field
 router.put(
-  "/:goalId",
+  "/:id",
   authMiddleware,
   menteeMiddleware,
   [
-    param("goalId").isMongoId().withMessage("Invalid goal ID"),
+    param("id").isMongoId().withMessage("Invalid goal ID"),
     body("title").optional().notEmpty().withMessage("Title cannot be empty"),
-    body("isCompleted")
+    body("status")
       .optional()
-      .isBoolean()
-      .withMessage("isCompleted must be a boolean"),
+      .isIn(["InProgress", "Completed"])
+      .withMessage("Invalid status provided."),
   ],
   validateRequest,
   updateGoal
 );
 
-// Delete a goal - Only the mentee who owns the goal can delete it
+// FIX: Standardize parameter to '/:id'
 router.delete(
-  "/:goalId",
+  "/:id",
   authMiddleware,
   menteeMiddleware,
-  [param("goalId").isMongoId().withMessage("Invalid goal ID")],
+  [param("id").isMongoId().withMessage("Invalid goal ID")],
   validateRequest,
   deleteGoal
 );

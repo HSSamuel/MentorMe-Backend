@@ -39,6 +39,7 @@ model User {
   points    Int     @default(0)
   levelId   String? @db.ObjectId
   level     Level?  @relation(fields: [levelId], references: [id])
+  lastSeen        DateTime       @default(now()) @updatedAt
   }
 
 model Profile {

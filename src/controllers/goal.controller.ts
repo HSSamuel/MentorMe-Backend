@@ -10,7 +10,8 @@ export const getGoalsForMentorship = async (
   res: Response
 ): Promise<void> => {
   const userId = getUserId(req);
-  const { mentorshipId } = req.params;
+  // FIX: Standardize parameter name to 'id'
+  const { id } = req.params;
 
   if (!userId) {
     res.status(401).json({ message: "Authentication error" });
@@ -20,7 +21,7 @@ export const getGoalsForMentorship = async (
   try {
     const mentorship = await prisma.mentorshipRequest.findFirst({
       where: {
-        id: mentorshipId,
+        id: id, // Use standardized 'id'
         OR: [{ menteeId: userId }, { mentorId: userId }],
       },
     });
@@ -33,7 +34,7 @@ export const getGoalsForMentorship = async (
     }
 
     const goals = await prisma.goal.findMany({
-      where: { mentorshipRequestId: mentorshipId },
+      where: { mentorshipRequestId: id }, // Use standardized 'id'
       orderBy: { createdAt: "asc" },
     });
 
@@ -71,7 +72,7 @@ export const createGoal = async (
     const mentorship = await prisma.mentorshipRequest.findFirst({
       where: {
         id: mentorshipRequestId,
-        menteeId: userId, // Only the mentee can create goals
+        menteeId: userId,
       },
     });
 
@@ -88,11 +89,11 @@ export const createGoal = async (
         description: description || "",
         category: category || "General",
         dueDate: dueDate ? new Date(dueDate) : null,
-        specific, // Now correctly saved
-        measurable, // Now correctly saved
-        achievable, // Now correctly saved
-        relevant, // Now correctly saved
-        timeBound, // Now correctly saved
+        specific,
+        measurable,
+        achievable,
+        relevant,
+        timeBound,
         status: "InProgress",
         mentorshipRequest: {
           connect: { id: mentorshipRequestId },
@@ -102,20 +103,22 @@ export const createGoal = async (
 
     res.status(201).json(newGoal);
   } catch (error) {
-    console.error(error);
+    console.error("Error creating goal:", error);
     res.status(500).json({ message: "Server error creating goal." });
   }
 };
 
-// The only function that needs to be checked is updateGoal
+// UPDATE a goal
 export const updateGoal = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   const userId = getUserId(req);
-  const { goalId } = req.params;
-  const { title, description, isCompleted } = req.body;
-  const io = req.app.locals.io; // Access io from the request object
+  // FIX: Standardize parameter name to 'id'
+  const { id } = req.params;
+  // FIX: Correctly read 'status' from the body
+  const { title, description, status } = req.body;
+  const io = req.app.locals.io;
 
   if (!userId) {
     res.status(401).json({ message: "Authentication error" });
@@ -125,7 +128,7 @@ export const updateGoal = async (
   try {
     const goal = await prisma.goal.findFirst({
       where: {
-        id: goalId,
+        id: id, // Use standardized 'id'
         mentorshipRequest: {
           menteeId: userId,
         },
@@ -134,18 +137,24 @@ export const updateGoal = async (
     });
 
     if (!goal) {
-      res
-        .status(404)
-        .json({ message: "Goal not found or you are not the mentee." });
+      res.status(404).json({
+        message: "Goal not found or you do not have permission to edit it.",
+      });
       return;
     }
 
+    const dataToUpdate: any = {};
+    if (title !== undefined) dataToUpdate.title = title;
+    if (description !== undefined) dataToUpdate.description = description;
+    if (status !== undefined) dataToUpdate.status = status;
+
     const updatedGoal = await prisma.goal.update({
-      where: { id: goalId },
-      data: { title, description, isCompleted },
+      where: { id: id },
+      data: dataToUpdate,
     });
 
-    if (isCompleted) {
+    // FIX: Check 'status' for completion
+    if (status === "Completed") {
       io.emit("goalCompleted", {
         goalId: updatedGoal.id,
         menteeId: userId,
@@ -155,6 +164,7 @@ export const updateGoal = async (
 
     res.status(200).json(updatedGoal);
   } catch (error) {
+    console.error("Error updating goal:", error);
     res.status(500).json({ message: "Server error updating goal." });
   }
 };
@@ -165,7 +175,8 @@ export const deleteGoal = async (
   res: Response
 ): Promise<void> => {
   const userId = getUserId(req);
-  const { goalId } = req.params;
+  // FIX: Standardize parameter name to 'id'
+  const { id } = req.params;
 
   if (!userId) {
     res.status(401).json({ message: "Authentication error" });
@@ -175,7 +186,7 @@ export const deleteGoal = async (
   try {
     const goal = await prisma.goal.findFirst({
       where: {
-        id: goalId,
+        id: id, // Use standardized 'id'
         mentorshipRequest: {
           menteeId: userId,
         },
@@ -183,18 +194,19 @@ export const deleteGoal = async (
     });
 
     if (!goal) {
-      res
-        .status(404)
-        .json({ message: "Goal not found or you are not the mentee." });
+      res.status(404).json({
+        message: "Goal not found or you do not have permission to delete it.",
+      });
       return;
     }
 
     await prisma.goal.delete({
-      where: { id: goalId },
+      where: { id: id },
     });
 
-    res.status(204).send(); // No content
+    res.status(204).send();
   } catch (error) {
+    console.error("Error deleting goal:", error);
     res.status(500).json({ message: "Server error deleting goal." });
   }
 };

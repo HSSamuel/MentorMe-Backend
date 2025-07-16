@@ -16,7 +16,8 @@ const prisma = new client_1.PrismaClient();
 // GET goals for a specific mentorship
 const getGoalsForMentorship = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const userId = (0, getUserId_1.getUserId)(req);
-    const { mentorshipId } = req.params;
+    // FIX: Standardize parameter name to 'id'
+    const { id } = req.params;
     if (!userId) {
         res.status(401).json({ message: "Authentication error" });
         return;
@@ -24,7 +25,7 @@ const getGoalsForMentorship = (req, res) => __awaiter(void 0, void 0, void 0, fu
     try {
         const mentorship = yield prisma.mentorshipRequest.findFirst({
             where: {
-                id: mentorshipId,
+                id: id, // Use standardized 'id'
                 OR: [{ menteeId: userId }, { mentorId: userId }],
             },
         });
@@ -35,7 +36,7 @@ const getGoalsForMentorship = (req, res) => __awaiter(void 0, void 0, void 0, fu
             return;
         }
         const goals = yield prisma.goal.findMany({
-            where: { mentorshipRequestId: mentorshipId },
+            where: { mentorshipRequestId: id }, // Use standardized 'id'
             orderBy: { createdAt: "asc" },
         });
         res.status(200).json(goals);
@@ -57,7 +58,7 @@ const createGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         const mentorship = yield prisma.mentorshipRequest.findFirst({
             where: {
                 id: mentorshipRequestId,
-                menteeId: userId, // Only the mentee can create goals
+                menteeId: userId,
             },
         });
         if (!mentorship) {
@@ -72,11 +73,11 @@ const createGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 description: description || "",
                 category: category || "General",
                 dueDate: dueDate ? new Date(dueDate) : null,
-                specific, // Now correctly saved
-                measurable, // Now correctly saved
-                achievable, // Now correctly saved
-                relevant, // Now correctly saved
-                timeBound, // Now correctly saved
+                specific,
+                measurable,
+                achievable,
+                relevant,
+                timeBound,
                 status: "InProgress",
                 mentorshipRequest: {
                     connect: { id: mentorshipRequestId },
@@ -86,17 +87,19 @@ const createGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         res.status(201).json(newGoal);
     }
     catch (error) {
-        console.error(error);
+        console.error("Error creating goal:", error);
         res.status(500).json({ message: "Server error creating goal." });
     }
 });
 exports.createGoal = createGoal;
-// The only function that needs to be checked is updateGoal
+// UPDATE a goal
 const updateGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const userId = (0, getUserId_1.getUserId)(req);
-    const { goalId } = req.params;
-    const { title, description, isCompleted } = req.body;
-    const io = req.app.locals.io; // Access io from the request object
+    // FIX: Standardize parameter name to 'id'
+    const { id } = req.params;
+    // FIX: Correctly read 'status' from the body
+    const { title, description, status } = req.body;
+    const io = req.app.locals.io;
     if (!userId) {
         res.status(401).json({ message: "Authentication error" });
         return;
@@ -104,7 +107,7 @@ const updateGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     try {
         const goal = yield prisma.goal.findFirst({
             where: {
-                id: goalId,
+                id: id, // Use standardized 'id'
                 mentorshipRequest: {
                     menteeId: userId,
                 },
@@ -112,16 +115,24 @@ const updateGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             include: { mentorshipRequest: true },
         });
         if (!goal) {
-            res
-                .status(404)
-                .json({ message: "Goal not found or you are not the mentee." });
+            res.status(404).json({
+                message: "Goal not found or you do not have permission to edit it.",
+            });
             return;
         }
+        const dataToUpdate = {};
+        if (title !== undefined)
+            dataToUpdate.title = title;
+        if (description !== undefined)
+            dataToUpdate.description = description;
+        if (status !== undefined)
+            dataToUpdate.status = status;
         const updatedGoal = yield prisma.goal.update({
-            where: { id: goalId },
-            data: { title, description, isCompleted },
+            where: { id: id },
+            data: dataToUpdate,
         });
-        if (isCompleted) {
+        // FIX: Check 'status' for completion
+        if (status === "Completed") {
             io.emit("goalCompleted", {
                 goalId: updatedGoal.id,
                 menteeId: userId,
@@ -131,6 +142,7 @@ const updateGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         res.status(200).json(updatedGoal);
     }
     catch (error) {
+        console.error("Error updating goal:", error);
         res.status(500).json({ message: "Server error updating goal." });
     }
 });
@@ -138,7 +150,8 @@ exports.updateGoal = updateGoal;
 // DELETE a goal
 const deleteGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const userId = (0, getUserId_1.getUserId)(req);
-    const { goalId } = req.params;
+    // FIX: Standardize parameter name to 'id'
+    const { id } = req.params;
     if (!userId) {
         res.status(401).json({ message: "Authentication error" });
         return;
@@ -146,24 +159,25 @@ const deleteGoal = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     try {
         const goal = yield prisma.goal.findFirst({
             where: {
-                id: goalId,
+                id: id, // Use standardized 'id'
                 mentorshipRequest: {
                     menteeId: userId,
                 },
             },
         });
         if (!goal) {
-            res
-                .status(404)
-                .json({ message: "Goal not found or you are not the mentee." });
+            res.status(404).json({
+                message: "Goal not found or you do not have permission to delete it.",
+            });
             return;
         }
         yield prisma.goal.delete({
-            where: { id: goalId },
+            where: { id: id },
         });
-        res.status(204).send(); // No content
+        res.status(204).send();
     }
     catch (error) {
+        console.error("Error deleting goal:", error);
         res.status(500).json({ message: "Server error deleting goal." });
     }
 });

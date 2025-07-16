@@ -1,10 +1,10 @@
-// Mentor/Backend/src/routes/request.routes.ts
 import { Router } from "express";
 import {
   createRequest,
   getSentRequests,
   getReceivedRequests,
   updateRequestStatus,
+  getRequestStatusWithMentor, // 1. Import the new controller function
 } from "../controllers/request.controller";
 import {
   authMiddleware,
@@ -32,13 +32,22 @@ router.get("/sent", authMiddleware, menteeMiddleware, getSentRequests);
 // This route is correct
 router.get("/received", authMiddleware, mentorMiddleware, getReceivedRequests);
 
-// FIX: Changed .isUUID() to .isMongoId()
+// FIX: Add the new route to check the status of a request with a specific mentor
+router.get(
+  "/status/:mentorId",
+  authMiddleware,
+  menteeMiddleware,
+  [param("mentorId").isMongoId().withMessage("Invalid mentor ID")],
+  validateRequest,
+  getRequestStatusWithMentor
+);
+
 router.put(
   "/:id",
   authMiddleware,
   mentorMiddleware,
   [
-    param("id").isMongoId().withMessage("Invalid request ID"), // Changed from isUUID()
+    param("id").isMongoId().withMessage("Invalid request ID"),
     body("status").isIn(["ACCEPTED", "REJECTED"]).withMessage("Invalid status"),
   ],
   validateRequest,

@@ -9,31 +9,24 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMessages = exports.getConversations = void 0;
+exports.createMessage = exports.getMessagesForConversation = exports.getConversations = void 0;
 const client_1 = require("@prisma/client");
+const getUserId_1 = require("../utils/getUserId");
 const prisma = new client_1.PrismaClient();
-// Helper to get user ID from the authenticated request
-const getUserId = (req) => {
-    if (!req.user || !("userId" in req.user))
-        return null;
-    return req.user.userId;
-};
-/**
- * Get all conversations for the logged-in user.
- * Includes the participants and the last message for a preview.
- */
+// GET all conversations for the logged-in user
 const getConversations = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const userId = getUserId(req);
+    const userId = (0, getUserId_1.getUserId)(req);
     if (!userId) {
-        // Corrected: Removed 'return' and added an explicit 'return' to exit
         res.status(401).json({ message: "Authentication error" });
         return;
     }
     try {
         const conversations = yield prisma.conversation.findMany({
             where: {
-                participantIDs: {
-                    has: userId,
+                participants: {
+                    some: {
+                        id: userId,
+                    },
                 },
             },
             include: {
@@ -43,65 +36,61 @@ const getConversations = (req, res) => __awaiter(void 0, void 0, void 0, functio
                         profile: {
                             select: {
                                 name: true,
+                                avatarUrl: true,
                             },
                         },
                     },
                 },
+                // FIX: This now correctly and efficiently includes the last message for each conversation.
                 messages: {
                     orderBy: {
                         createdAt: "desc",
                     },
-                    take: 1, // Get only the last message for the preview
+                    take: 1, // This is the key to fetching only the most recent message.
                 },
             },
             orderBy: {
-                updatedAt: "desc",
+                updatedAt: "desc", // Sorts conversations by the most recently active.
             },
         });
         res.status(200).json(conversations);
     }
     catch (error) {
         console.error("Error fetching conversations:", error);
-        res
-            .status(500)
-            .json({ message: "Server error while fetching conversations." });
+        res.status(500).json({ message: "Server error fetching conversations" });
     }
 });
 exports.getConversations = getConversations;
-/**
- * Get all messages for a specific conversation.
- * Ensures the logged-in user is a participant of the conversation before returning messages.
- */
-const getMessages = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const userId = getUserId(req);
+// GET all messages for a specific conversation
+const getMessagesForConversation = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const userId = (0, getUserId_1.getUserId)(req);
     const { conversationId } = req.params;
     if (!userId) {
-        // Corrected: Removed 'return' and added an explicit 'return' to exit
         res.status(401).json({ message: "Authentication error" });
         return;
     }
     try {
-        // First, verify the user is actually part of the conversation
+        // FIX: First, verify the user is actually part of the conversation.
         const conversation = yield prisma.conversation.findFirst({
             where: {
                 id: conversationId,
-                participantIDs: {
-                    has: userId,
+                participants: {
+                    some: {
+                        id: userId,
+                    },
                 },
             },
         });
         if (!conversation) {
-            // Corrected: Removed 'return' and added an explicit 'return' to exit
-            res.status(403).json({
-                message: "Access denied. You are not a participant in this conversation.",
-            });
+            res
+                .status(404)
+                .json({ message: "Conversation not found or access denied" });
             return;
         }
-        // If they are a participant, fetch all messages for that conversation
+        // If authorized, fetch all messages.
         const messages = yield prisma.message.findMany({
-            where: {
-                conversationId,
-            },
+            where: { conversationId },
+            orderBy: { createdAt: "asc" },
             include: {
                 sender: {
                     select: {
@@ -109,20 +98,64 @@ const getMessages = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                         profile: {
                             select: {
                                 name: true,
+                                avatarUrl: true,
                             },
                         },
                     },
                 },
             },
-            orderBy: {
-                createdAt: "asc",
-            },
         });
         res.status(200).json(messages);
     }
     catch (error) {
-        console.error("Error fetching messages:", error);
-        res.status(500).json({ message: "Server error while fetching messages." });
+        console.error(`Error fetching messages for convo ${conversationId}:`, error);
+        res.status(500).json({ message: "Server error fetching messages" });
     }
 });
-exports.getMessages = getMessages;
+exports.getMessagesForConversation = getMessagesForConversation;
+// POST a new message
+const createMessage = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const userId = (0, getUserId_1.getUserId)(req);
+    const { conversationId, content } = req.body;
+    const io = req.app.locals.io;
+    if (!userId) {
+        res.status(401).json({ message: "Authentication error" });
+        return;
+    }
+    try {
+        // FIX: Use a database transaction to ensure creating the message and updating the
+        // conversation timestamp happen together.
+        const [newMessage, updatedConversation] = yield prisma.$transaction([
+            prisma.message.create({
+                data: {
+                    content,
+                    senderId: userId,
+                    conversationId,
+                },
+                include: {
+                    sender: {
+                        select: {
+                            id: true,
+                            profile: { select: { name: true, avatarUrl: true } },
+                        },
+                    },
+                },
+            }),
+            prisma.conversation.update({
+                where: { id: conversationId },
+                data: { updatedAt: new Date() },
+                include: { participants: true },
+            }),
+        ]);
+        // Emit the new message to all participants in the conversation.
+        updatedConversation.participants.forEach((participant) => {
+            io.to(participant.id).emit("receiveMessage", newMessage);
+        });
+        res.status(201).json(newMessage);
+    }
+    catch (error) {
+        console.error("Error creating message:", error);
+        res.status(500).json({ message: "Server error while sending message" });
+    }
+});
+exports.createMessage = createMessage;

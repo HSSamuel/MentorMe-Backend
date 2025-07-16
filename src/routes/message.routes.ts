@@ -1,27 +1,41 @@
 import { Router } from "express";
 import {
   getConversations,
-  getMessages,
+  // FIX: Corrected the function name from getMessages to getMessagesForConversation
+  getMessagesForConversation,
+  createMessage,
 } from "../controllers/message.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
-import { param } from "express-validator";
+import { body, param } from "express-validator";
 import { validateRequest } from "../middleware/validateRequest";
 
 const router = Router();
 
-// Route to get all conversations for the logged-in user
+// This route gets all conversations for the logged-in user
 router.get("/", authMiddleware, getConversations);
 
-// Route to get all messages for a specific conversation
+// This route gets all messages for a specific conversation
 router.get(
   "/:conversationId",
   authMiddleware,
+  [param("conversationId").isMongoId().withMessage("Invalid conversation ID")],
+  validateRequest,
+  // FIX: Use the correctly imported function here as well
+  getMessagesForConversation
+);
+
+// This route creates a new message in a conversation
+router.post(
+  "/",
+  authMiddleware,
   [
-    // Validate that the conversationId is a valid MongoDB ObjectId
-    param("conversationId").isMongoId().withMessage("Invalid conversation ID"),
+    body("conversationId")
+      .isMongoId()
+      .withMessage("Conversation ID is required"),
+    body("content").notEmpty().withMessage("Message content cannot be empty"),
   ],
   validateRequest,
-  getMessages
+  createMessage
 );
 
 export default router;

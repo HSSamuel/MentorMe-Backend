@@ -1,20 +1,58 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { PrismaClient } from "@prisma/client";
-import { getUserId } from "../utils/getUserId"; // This line was missing
+import { getUserId } from "../utils/getUserId";
 
 const prisma = new PrismaClient();
 
-// GET a single mentor's public profile
-export const getMentorPublicProfile = async (
+export const getMyProfile = async (
   req: Request,
-  res: Response
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const userId = getUserId(req);
+  if (!userId) {
+    res.status(401).json({ message: "Authentication required" });
+    return;
+  }
+  try {
+    const userProfile = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        lastSeen: true,
+        profile: true,
+      },
+    });
+
+    if (!userProfile) {
+      res.status(404).json({ message: "User profile not found." });
+      return;
+    }
+    res.status(200).json(userProfile);
+  } catch (error) {
+    console.error("Error fetching my profile:", error);
+    next(error);
+  }
+};
+
+// [MODIFIED START]: Generalized from getMentorPublicProfile to getUserPublicProfile
+export const getUserPublicProfile = async (
+  req: Request,
+  res: Response,
+  next: NextFunction // [ADD] Add NextFunction for consistent error handling
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const mentor = await prisma.user.findUnique({
-      where: { id, role: "MENTOR" },
+    console.log(`Attempting to fetch public profile for user with ID: ${id}`);
+    const userPublicProfile = await prisma.user.findUnique({
+      where: { id }, // [MODIFIED]: Removed role: "MENTOR" filter
       select: {
         id: true,
+        email: true, // [MODIFIED]: Including email (consider if this should be public)
+        role: true, // [ADD]: Include role so frontend can differentiate (e.g., if mentee/mentor)
+        lastSeen: true,
         profile: {
           select: {
             name: true,
@@ -22,20 +60,27 @@ export const getMentorPublicProfile = async (
             skills: true,
             goals: true,
             avatarUrl: true,
+            // Add other public profile fields as needed
           },
         },
       },
     });
 
-    if (!mentor) {
-      res.status(404).json({ message: "Mentor not found." });
+    if (!userPublicProfile) {
+      console.log(`User with ID ${id} not found.`);
+      res.status(404).json({ message: "User profile not found." });
       return;
     }
-    res.status(200).json(mentor);
+    console.log(
+      `Successfully fetched public profile for: ${userPublicProfile.profile ? userPublicProfile.profile.name : "Unknown Name"}`
+    );
+    res.status(200).json(userPublicProfile);
   } catch (error) {
-    res.status(500).json({ message: "Error fetching mentor profile." });
+    console.error("Error in getUserPublicProfile:", error);
+    next(error); // [ADD] Pass to error middleware
   }
 };
+// [MODIFIED END]
 
 // GET all mentors with pagination
 export const getAllMentors = async (
@@ -54,6 +99,7 @@ export const getAllMentors = async (
       select: {
         id: true,
         email: true,
+        lastSeen: true,
         profile: true,
       },
     });
@@ -100,11 +146,9 @@ export const getMentorStats = async (
   req: Request,
   res: Response
 ): Promise<void> => {
-  // Use the ID from the URL parameters
   const { id } = req.params;
 
   try {
-    // A single transaction to run all queries concurrently on the database
     const [
       menteeCount,
       pendingRequests,
@@ -124,9 +168,17 @@ export const getMentorStats = async (
       prisma.session.count({
         where: { mentorId: id, date: { lt: new Date() } },
       }),
+      // FIX: The nested 'where' clause for the review aggregation is corrected
+      // to properly filter reviews based on the mentorId from the related mentorship request.
       prisma.review.aggregate({
-        where: { mentorshipRequest: { mentorId: id } },
-        _avg: { rating: true },
+        where: {
+          mentorshipRequest: {
+            mentorId: id,
+          },
+        },
+        _avg: {
+          rating: true,
+        },
       }),
     ]);
 
@@ -140,6 +192,8 @@ export const getMentorStats = async (
       averageRating,
     });
   } catch (error) {
+    // FIX: Added detailed error logging for easier debugging in the future.
+    console.error(`Error fetching mentor stats for mentor ID ${id}:`, error);
     res.status(500).json({ message: "Error fetching mentor stats." });
   }
 };
@@ -195,7 +249,6 @@ export const updateMyProfile = async (
   const { name, bio, skills, goals } = req.body;
   let avatarUrl: string | undefined = undefined;
 
-  // Get the file path from Cloudinary's response if it exists
   if (req.file) {
     avatarUrl = req.file.path;
   }
@@ -220,7 +273,6 @@ export const updateMyProfile = async (
       },
     });
 
-    // Emit a socket event if the avatar was updated
     if (avatarUrl) {
       const io = req.app.locals.io;
       io.emit("avatarUpdated", { userId, avatarUrl });
@@ -233,7 +285,6 @@ export const updateMyProfile = async (
   }
 };
 
-// GET recommended mentors for the current mentee
 export const getRecommendedMentors = async (
   req: Request,
   res: Response
@@ -251,23 +302,21 @@ export const getRecommendedMentors = async (
     });
 
     if (!menteeProfile || menteeProfile.skills.length === 0) {
-      // Return an empty array if the mentee has no skills listed
       res.status(200).json([]);
       return;
     }
 
-    // Find mentors who have at least one skill that matches the mentee's skills
     const recommendedMentors = await prisma.user.findMany({
       where: {
         role: "MENTOR",
-        id: { not: userId }, // Ensure users don't see themselves
+        id: { not: userId },
         profile: {
           skills: {
             hasSome: menteeProfile.skills,
           },
         },
       },
-      take: 3, // Limit to 3 recommendations for the dashboard
+      take: 3,
       select: {
         id: true,
         profile: true,

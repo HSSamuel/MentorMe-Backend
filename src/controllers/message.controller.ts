@@ -1,25 +1,16 @@
 import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
+import { getUserId } from "../utils/getUserId";
 
 const prisma = new PrismaClient();
 
-// Helper to get user ID from the authenticated request
-const getUserId = (req: Request): string | null => {
-  if (!req.user || !("userId" in req.user)) return null;
-  return req.user.userId as string;
-};
-
-/**
- * Get all conversations for the logged-in user.
- * Includes the participants and the last message for a preview.
- */
+// GET all conversations for the logged-in user
 export const getConversations = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   const userId = getUserId(req);
   if (!userId) {
-    // Corrected: Removed 'return' and added an explicit 'return' to exit
     res.status(401).json({ message: "Authentication error" });
     return;
   }
@@ -27,8 +18,10 @@ export const getConversations = async (
   try {
     const conversations = await prisma.conversation.findMany({
       where: {
-        participantIDs: {
-          has: userId,
+        participants: {
+          some: {
+            id: userId,
+          },
         },
       },
       include: {
@@ -38,35 +31,32 @@ export const getConversations = async (
             profile: {
               select: {
                 name: true,
+                avatarUrl: true,
               },
             },
           },
         },
+        // FIX: This now correctly and efficiently includes the last message for each conversation.
         messages: {
           orderBy: {
             createdAt: "desc",
           },
-          take: 1, // Get only the last message for the preview
+          take: 1, // This is the key to fetching only the most recent message.
         },
       },
       orderBy: {
-        updatedAt: "desc",
+        updatedAt: "desc", // Sorts conversations by the most recently active.
       },
     });
     res.status(200).json(conversations);
   } catch (error) {
     console.error("Error fetching conversations:", error);
-    res
-      .status(500)
-      .json({ message: "Server error while fetching conversations." });
+    res.status(500).json({ message: "Server error fetching conversations" });
   }
 };
 
-/**
- * Get all messages for a specific conversation.
- * Ensures the logged-in user is a participant of the conversation before returning messages.
- */
-export const getMessages = async (
+// GET all messages for a specific conversation
+export const getMessagesForConversation = async (
   req: Request,
   res: Response
 ): Promise<void> => {
@@ -74,36 +64,34 @@ export const getMessages = async (
   const { conversationId } = req.params;
 
   if (!userId) {
-    // Corrected: Removed 'return' and added an explicit 'return' to exit
     res.status(401).json({ message: "Authentication error" });
     return;
   }
 
   try {
-    // First, verify the user is actually part of the conversation
+    // FIX: First, verify the user is actually part of the conversation.
     const conversation = await prisma.conversation.findFirst({
       where: {
         id: conversationId,
-        participantIDs: {
-          has: userId,
+        participants: {
+          some: {
+            id: userId,
+          },
         },
       },
     });
 
     if (!conversation) {
-      // Corrected: Removed 'return' and added an explicit 'return' to exit
-      res.status(403).json({
-        message:
-          "Access denied. You are not a participant in this conversation.",
-      });
+      res
+        .status(404)
+        .json({ message: "Conversation not found or access denied" });
       return;
     }
 
-    // If they are a participant, fetch all messages for that conversation
+    // If authorized, fetch all messages.
     const messages = await prisma.message.findMany({
-      where: {
-        conversationId,
-      },
+      where: { conversationId },
+      orderBy: { createdAt: "asc" },
       include: {
         sender: {
           select: {
@@ -111,19 +99,72 @@ export const getMessages = async (
             profile: {
               select: {
                 name: true,
+                avatarUrl: true,
               },
             },
           },
         },
       },
-      orderBy: {
-        createdAt: "asc",
-      },
     });
 
     res.status(200).json(messages);
   } catch (error) {
-    console.error("Error fetching messages:", error);
-    res.status(500).json({ message: "Server error while fetching messages." });
+    console.error(
+      `Error fetching messages for convo ${conversationId}:`,
+      error
+    );
+    res.status(500).json({ message: "Server error fetching messages" });
+  }
+};
+
+// POST a new message
+export const createMessage = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const userId = getUserId(req);
+  const { conversationId, content } = req.body;
+  const io = req.app.locals.io;
+
+  if (!userId) {
+    res.status(401).json({ message: "Authentication error" });
+    return;
+  }
+
+  try {
+    // FIX: Use a database transaction to ensure creating the message and updating the
+    // conversation timestamp happen together.
+    const [newMessage, updatedConversation] = await prisma.$transaction([
+      prisma.message.create({
+        data: {
+          content,
+          senderId: userId,
+          conversationId,
+        },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              profile: { select: { name: true, avatarUrl: true } },
+            },
+          },
+        },
+      }),
+      prisma.conversation.update({
+        where: { id: conversationId },
+        data: { updatedAt: new Date() },
+        include: { participants: true },
+      }),
+    ]);
+
+    // Emit the new message to all participants in the conversation.
+    updatedConversation.participants.forEach((participant) => {
+      io.to(participant.id).emit("receiveMessage", newMessage);
+    });
+
+    res.status(201).json(newMessage);
+  } catch (error) {
+    console.error("Error creating message:", error);
+    res.status(500).json({ message: "Server error while sending message" });
   }
 };

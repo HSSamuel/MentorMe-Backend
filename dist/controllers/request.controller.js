@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateRequestStatus = exports.getReceivedRequests = exports.getSentRequests = exports.createRequest = void 0;
+exports.updateRequestStatus = exports.getReceivedRequests = exports.getSentRequests = exports.createRequest = exports.getRequestStatusWithMentor = void 0;
 const client_1 = require("@prisma/client");
 const gamification_service_1 = require("../services/gamification.service");
 const prisma = new client_1.PrismaClient();
@@ -22,6 +22,39 @@ const getUserIdForRequest = (req) => {
         return req.user.id;
     return null;
 };
+// [... existing functions like createRequest, getSentRequests, etc. remain here ...]
+// FIX: Add a new function to check the status of a request with a specific mentor
+const getRequestStatusWithMentor = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const menteeId = getUserIdForRequest(req);
+    const { mentorId } = req.params;
+    if (!menteeId) {
+        res.status(401).json({ message: "Authentication error" });
+        return;
+    }
+    try {
+        const request = yield prisma.mentorshipRequest.findFirst({
+            where: {
+                menteeId,
+                mentorId,
+            },
+            select: {
+                status: true,
+            },
+        });
+        if (request) {
+            res.status(200).json({ status: request.status });
+        }
+        else {
+            // If no request is found, it's not an error. It just means a request hasn't been sent.
+            res.status(200).json({ status: null });
+        }
+    }
+    catch (error) {
+        console.error("Error fetching request status:", error);
+        res.status(500).json({ message: "Server error checking request status" });
+    }
+});
+exports.getRequestStatusWithMentor = getRequestStatusWithMentor;
 const createRequest = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const { mentorId } = req.body;
@@ -35,7 +68,6 @@ const createRequest = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         return;
     }
     try {
-        // --- FIX: Check for an existing request ---
         const existingRequest = yield prisma.mentorshipRequest.findFirst({
             where: {
                 menteeId,
@@ -44,7 +76,7 @@ const createRequest = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         });
         if (existingRequest) {
             res
-                .status(409) // 409 Conflict
+                .status(409)
                 .json({ message: "You have already sent a request to this mentor." });
             return;
         }
@@ -52,7 +84,6 @@ const createRequest = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             data: { menteeId, mentorId, status: "PENDING" },
             include: { mentee: { include: { profile: true } } },
         });
-        // --- Create Notification for Mentor ---
         yield prisma.notification.create({
             data: {
                 userId: mentorId,
@@ -77,7 +108,13 @@ const getSentRequests = (req, res) => __awaiter(void 0, void 0, void 0, function
     try {
         const requests = yield prisma.mentorshipRequest.findMany({
             where: { menteeId },
-            include: { mentor: { select: { id: true, profile: true } } }, // included mentorId
+            include: {
+                mentor: {
+                    include: {
+                        profile: true,
+                    },
+                },
+            },
             orderBy: { createdAt: "desc" },
         });
         res.status(200).json(requests);
@@ -96,7 +133,13 @@ const getReceivedRequests = (req, res) => __awaiter(void 0, void 0, void 0, func
     try {
         const requests = yield prisma.mentorshipRequest.findMany({
             where: { mentorId },
-            include: { mentee: { select: { profile: true } } },
+            include: {
+                mentee: {
+                    include: {
+                        profile: true,
+                    },
+                },
+            },
             orderBy: { createdAt: "desc" },
         });
         res.status(200).json(requests);
@@ -134,17 +177,16 @@ const updateRequestStatus = (req, res) => __awaiter(void 0, void 0, void 0, func
             where: { id },
             data: { status: status },
         });
-        // If the request was accepted, create a conversation and award points
         if (status === "ACCEPTED") {
             yield prisma.conversation.create({
                 data: {
-                    participantIDs: [request.mentorId, request.menteeId],
+                    participants: {
+                        connect: [{ id: request.mentorId }, { id: request.menteeId }],
+                    },
                 },
             });
-            // --- Award points for accepting a mentorship ---
-            yield (0, gamification_service_1.awardPoints)(request.mentorId, 25); // Mentor gets 25 points
-            yield (0, gamification_service_1.awardPoints)(request.menteeId, 10); // Mentee gets 10 points
-            // --- Create Notification for Mentee ---
+            yield (0, gamification_service_1.awardPoints)(request.mentorId, 25);
+            yield (0, gamification_service_1.awardPoints)(request.menteeId, 10);
             yield prisma.notification.create({
                 data: {
                     userId: request.menteeId,
@@ -155,7 +197,6 @@ const updateRequestStatus = (req, res) => __awaiter(void 0, void 0, void 0, func
             });
         }
         else if (status === "REJECTED") {
-            // --- Create Notification for Mentee ---
             yield prisma.notification.create({
                 data: {
                     userId: request.menteeId,
