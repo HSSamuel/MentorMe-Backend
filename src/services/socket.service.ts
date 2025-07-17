@@ -240,26 +240,32 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
       }
     });
 
-    // --- WebRTC Signaling Events ---
+    // ===================================================================
+    // --- FINAL WebRTC Signaling Events with Logging ---
+    // ===================================================================
 
-    // This event is triggered when a user joins the video call room.
     socket.on("join-room", (roomId: string) => {
       socket.join(roomId);
+      console.log(`[LOG] User ${socket.id} joined room: ${roomId}`);
 
       const clientsInRoom = io.sockets.adapter.rooms.get(roomId);
       const numClients = clientsInRoom ? clientsInRoom.size : 0;
+      console.log(`[LOG] Users in room ${roomId}: ${numClients}`);
 
-      // When exactly two users are in the room, notify them of each other.
       if (numClients === 2) {
         const clients = Array.from(clientsInRoom!);
-        // Tell each client about the other. This kicks off the connection process.
+        console.log(
+          `[LOG] Two users detected. Notifying both to start connection.`
+        );
         io.to(clients[0]).emit("other-user-ready", { otherUserId: clients[1] });
         io.to(clients[1]).emit("other-user-ready", { otherUserId: clients[0] });
       }
     });
 
-    // The following events simply relay the WebRTC connection data between the two users.
     socket.on("offer", (payload: { target: string; offer: any }) => {
+      console.log(
+        `[LOG] Relaying 'offer' from ${socket.id} to ${payload.target}`
+      );
       io.to(payload.target).emit("offer", {
         from: socket.id,
         offer: payload.offer,
@@ -267,6 +273,9 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
     });
 
     socket.on("answer", (payload: { target: string; answer: any }) => {
+      console.log(
+        `[LOG] Relaying 'answer' from ${socket.id} to ${payload.target}`
+      );
       io.to(payload.target).emit("answer", {
         from: socket.id,
         answer: payload.answer,
@@ -276,6 +285,9 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
     socket.on(
       "ice-candidate",
       (payload: { target: string; candidate: any }) => {
+        console.log(
+          `[LOG] Relaying 'ice-candidate' from ${socket.id} to ${payload.target}`
+        );
         io.to(payload.target).emit("ice-candidate", {
           from: socket.id,
           candidate: payload.candidate,
@@ -283,16 +295,8 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
       }
     );
 
-    // Handle user leaving
-    socket.on("disconnect", () => {
-      // Notify any remaining user in any room that the other user has left.
-      io.emit("user-left", socket.id);
-    });
+    // ===================================================================
 
-    /**
-     * Event listener for when a user disconnects.
-     * Updates user status to offline and records last seen time.
-     */
     socket.on("disconnect", () => {
       console.log(`🔴 User disconnected: ${socket.id}`);
       if (user && user.userId) {
@@ -300,21 +304,15 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
           isOnline: false,
           lastSeen: new Date(),
         });
-        emitUserStatusChange(user.userId, userStatuses.get(user.userId)!); // Notify all clients
+        emitUserStatusChange(user.userId, userStatuses.get(user.userId)!);
       }
-      socket.rooms.forEach((room) => {
-        if (room !== socket.id) {
-          socket.to(room).emit("user-left", socket.id);
-        }
-      });
+      // Notify any remaining user in any room that the other user has left.
+      io.emit("user-left", socket.id);
     });
   });
 };
 
-// You can optionally export a function to get the `io` instance
-// if you need to emit events from other parts of your application (e.g., REST controllers).
 export const getIo = (): SocketIOServer => {
-  // Corrected type: SocketIOServer
   if (!io) {
     throw new Error("Socket.IO server not initialized.");
   }
