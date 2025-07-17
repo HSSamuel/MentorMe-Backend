@@ -18,19 +18,10 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const prisma = new client_1.PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
 // Global map to store user online status and last seen timestamp
-// Key: userId, Value: { isOnline: boolean, lastSeen: Date | null }
 const userStatuses = new Map();
-// Declare the 'io' instance at the module level so it's accessible to emitUserStatusChange
 let io;
-/**
- * Emits a user's status change to all connected clients.
- * This function now correctly accesses the module-scoped 'io' instance.
- * @param userId The ID of the user whose status changed.
- * @param status The new status object.
- */
 const emitUserStatusChange = (userId, status) => {
     if (io) {
-        // Ensure io is initialized before emitting
         io.emit("userStatusChange", Object.assign({ userId }, status));
         console.log(`Emitting status change for ${userId}: ${status.isOnline ? "Online" : "Offline"} (Last Seen: ${status.lastSeen ? status.lastSeen.toISOString() : "N/A"})`);
     }
@@ -38,18 +29,11 @@ const emitUserStatusChange = (userId, status) => {
         console.error("Socket.IO 'io' instance not initialized when trying to emit user status change.");
     }
 };
-/**
- * Initializes and configures the Socket.IO server.
- * This function sets up authentication middleware for sockets and defines event listeners.
- * @param ioInstance The Socket.IO Server instance passed from the main application.
- */
 const initializeSocket = (ioInstance) => {
-    // Corrected type: SocketIOServer
-    io = ioInstance; // Assign the passed ioInstance to the module-scoped 'io' variable
+    io = ioInstance;
     io.use((socket, next) => {
         const token = socket.handshake.auth.token;
         if (!token) {
-            console.warn("Socket authentication error: Token not provided.");
             return next(new Error("Authentication error: Token not provided."));
         }
         try {
@@ -58,7 +42,6 @@ const initializeSocket = (ioInstance) => {
             next();
         }
         catch (err) {
-            console.error("Socket authentication error: Invalid token.", err);
             next(new Error("Authentication error: Invalid token."));
         }
     });
@@ -70,16 +53,10 @@ const initializeSocket = (ioInstance) => {
             socket.disconnect(true);
             return;
         }
-        // On connection, set user status to online
         userStatuses.set(user.userId, { isOnline: true, lastSeen: null });
-        emitUserStatusChange(user.userId, userStatuses.get(user.userId)); // Notify all clients
-        // Each user joins a room identified by their userId to receive personal notifications.
+        emitUserStatusChange(user.userId, userStatuses.get(user.userId));
         socket.join(user.userId);
         console.log(`User ${user.userId} joined personal room.`);
-        /**
-         * Event listener for joining a specific conversation room.
-         * Clients emit this when they open a chat with a specific conversation.
-         */
         socket.on("joinConversation", (conversationId) => {
             socket.join(conversationId);
             console.log(`User ${user.userId} joined conversation room: ${conversationId}`);
@@ -220,24 +197,30 @@ const initializeSocket = (ioInstance) => {
         // --- WebRTC Signaling Events ---
         socket.on("join-room", (roomId) => {
             socket.join(roomId);
-            socket.to(roomId).emit("user-joined", socket.id);
-            console.log(`User ${socket.id} joined WebRTC room ${roomId}`);
+            const clientsInRoom = io.sockets.adapter.rooms.get(roomId);
+            const numClients = clientsInRoom ? clientsInRoom.size : 0;
+            if (numClients === 2) {
+                const clients = Array.from(clientsInRoom);
+                io.to(clients[0]).emit("other-user", clients[1]);
+                io.to(clients[1]).emit("other-user", clients[0]);
+            }
         });
+        // 🔽🔽🔽 THESE WERE MISSING 🔽🔽🔽
         socket.on("offer", (payload) => {
             io.to(payload.target).emit("offer", {
-                from: socket.id, // Should be 'from'
+                from: socket.id,
                 offer: payload.offer,
             });
         });
         socket.on("answer", (payload) => {
             io.to(payload.target).emit("answer", {
-                from: socket.id, // Should be 'from'
+                from: socket.id,
                 answer: payload.answer,
             });
         });
         socket.on("ice-candidate", (payload) => {
             io.to(payload.target).emit("ice-candidate", {
-                from: socket.id, // Should be 'from'
+                from: socket.id,
                 candidate: payload.candidate,
             });
         });
