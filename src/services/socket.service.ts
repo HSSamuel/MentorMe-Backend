@@ -13,18 +13,28 @@ interface CustomSocket extends Socket {
 }
 
 // Global map to store user online status and last seen timestamp
+// Key: userId, Value: { isOnline: boolean, lastSeen: Date | null }
+
 const userStatuses = new Map<
   string,
   { isOnline: boolean; lastSeen: Date | null }
 >();
 
+// Declare the 'io' instance at the module level so it's accessible to emitUserStatusChange
 let io: SocketIOServer;
+/**
+ * Emits a user's status change to all connected clients.
+ * This function now correctly accesses the module-scoped 'io' instance.
+ * @param userId The ID of the user whose status changed.
+ * @param status The new status object.
+ */
 
 const emitUserStatusChange = (
   userId: string,
   status: { isOnline: boolean; lastSeen: Date | null }
 ) => {
   if (io) {
+    // Ensure io is initialized before emitting
     io.emit("userStatusChange", { userId, ...status });
     console.log(
       `Emitting status change for ${userId}: ${status.isOnline ? "Online" : "Offline"} (Last Seen: ${status.lastSeen ? status.lastSeen.toISOString() : "N/A"})`
@@ -36,12 +46,19 @@ const emitUserStatusChange = (
   }
 };
 
-export const initializeSocket = (ioInstance: SocketIOServer) => {
-  io = ioInstance;
+/**
+ * Initializes and configures the Socket.IO server.
+ * This function sets up authentication middleware for sockets and defines event listeners.
+ * @param ioInstance The Socket.IO Server instance passed from the main application.
+ */
 
+export const initializeSocket = (ioInstance: SocketIOServer) => {
+  // Corrected type: SocketIOServer
+  io = ioInstance; // Assign the passed ioInstance to the module-scoped 'io' variable
   io.use((socket: CustomSocket, next) => {
     const token = socket.handshake.auth.token;
     if (!token) {
+      console.warn("Socket authentication error: Token not provided.");
       return next(new Error("Authentication error: Token not provided."));
     }
     try {
@@ -49,13 +66,13 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
       socket.user = { userId: decoded.userId };
       next();
     } catch (err) {
+      console.error("Socket authentication error: Invalid token.", err);
       next(new Error("Authentication error: Invalid token."));
     }
   });
 
   io.on("connection", (socket: CustomSocket) => {
     console.log(`🟢 User connected: ${socket.id}`);
-
     const user = socket.user;
     if (!user || !user.userId) {
       console.error(`Socket ${socket.id} connected without a valid user ID.`);
@@ -63,12 +80,13 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
       return;
     }
 
+    // On connection, set user status to online
     userStatuses.set(user.userId, { isOnline: true, lastSeen: null });
-    emitUserStatusChange(user.userId, userStatuses.get(user.userId)!);
+    emitUserStatusChange(user.userId, userStatuses.get(user.userId)!); // Notify all clients
+    // Each user joins a room identified by their userId to receive personal notifications.
 
     socket.join(user.userId);
     console.log(`User ${user.userId} joined personal room.`);
-
     socket.on("joinConversation", (conversationId: string) => {
       socket.join(conversationId);
       console.log(
@@ -76,16 +94,11 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
       );
     });
 
-    /**
-     * Event listener for sending a new message.
-     * This event saves the message to the database and broadcasts it.
-     */
     socket.on(
       "sendMessage",
       async (data: { conversationId: string; content: string }) => {
         try {
           const { conversationId, content } = data;
-
           const conversationExists = await prisma.conversation.findFirst({
             where: {
               id: conversationId,
@@ -101,9 +114,11 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
             console.warn(
               `User ${user.userId} attempted to send message to non-existent or unauthorized conversation ${conversationId}.`
             );
+
             socket.emit("messageError", {
               message: "Unauthorized or conversation not found.",
             });
+
             return;
           }
 
@@ -128,7 +143,6 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
           console.log(
             `Message sent and broadcasted in conversation ${conversationId} by ${user.userId}.`
           );
-
           const recipient = message.conversation.participants.find(
             (p) => p.id !== user.userId
           );
@@ -144,6 +158,7 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
                 link: `/messages/${conversationId}`,
               },
             });
+
             io.to(recipient.id).emit("newNotification", notification); // Use the module-scoped 'io'
             console.log(
               `Notification sent to ${recipient.id} for new message.`
@@ -158,10 +173,6 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
       }
     );
 
-    /**
-     * Event listener for when a goal is completed.
-     * This creates a notification for the mentor.
-     */
     socket.on(
       "goalCompleted",
       async (data: { goalId: string; menteeId: string; mentorId: string }) => {
@@ -183,6 +194,7 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
                 link: `/my-mentors`,
               },
             });
+
             io.to(mentorId).emit("newNotification", notification); // Use the module-scoped 'io'
             console.log(
               `Goal completion notification sent to mentor ${mentorId}.`
@@ -197,10 +209,6 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
       }
     );
 
-    /**
-     * Event listener for when a mentor updates their availability.
-     * This creates notifications for their associated mentees.
-     */
     socket.on("availabilityUpdated", async (data: { mentorId: string }) => {
       try {
         const { mentorId } = data;
@@ -226,6 +234,7 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
                 link: `/book-session/${mentorId}`,
               },
             });
+
             io.to(mentee.menteeId).emit("newNotification", notification); // Use the module-scoped 'io'
             console.log(
               `Availability update notification sent to mentee ${mentee.menteeId}.`
@@ -240,32 +249,20 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
       }
     });
 
-    // ===================================================================
-    // --- FINAL WebRTC Signaling Events with Logging ---
-    // ===================================================================
-
+    // --- WebRTC Signaling Events ---
     socket.on("join-room", (roomId: string) => {
       socket.join(roomId);
-      console.log(`[LOG] User ${socket.id} joined room: ${roomId}`);
-
       const clientsInRoom = io.sockets.adapter.rooms.get(roomId);
       const numClients = clientsInRoom ? clientsInRoom.size : 0;
-      console.log(`[LOG] Users in room ${roomId}: ${numClients}`);
-
       if (numClients === 2) {
         const clients = Array.from(clientsInRoom!);
-        console.log(
-          `[LOG] Two users detected. Notifying both to start connection.`
-        );
-        io.to(clients[0]).emit("other-user-ready", { otherUserId: clients[1] });
-        io.to(clients[1]).emit("other-user-ready", { otherUserId: clients[0] });
+        io.to(clients[0]).emit("other-user", clients[1]);
+        io.to(clients[1]).emit("other-user", clients[0]);
       }
     });
 
+    // 🔽🔽🔽 THESE WERE MISSING 🔽🔽🔽
     socket.on("offer", (payload: { target: string; offer: any }) => {
-      console.log(
-        `[LOG] Relaying 'offer' from ${socket.id} to ${payload.target}`
-      );
       io.to(payload.target).emit("offer", {
         from: socket.id,
         offer: payload.offer,
@@ -273,9 +270,6 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
     });
 
     socket.on("answer", (payload: { target: string; answer: any }) => {
-      console.log(
-        `[LOG] Relaying 'answer' from ${socket.id} to ${payload.target}`
-      );
       io.to(payload.target).emit("answer", {
         from: socket.id,
         answer: payload.answer,
@@ -285,17 +279,12 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
     socket.on(
       "ice-candidate",
       (payload: { target: string; candidate: any }) => {
-        console.log(
-          `[LOG] Relaying 'ice-candidate' from ${socket.id} to ${payload.target}`
-        );
         io.to(payload.target).emit("ice-candidate", {
           from: socket.id,
           candidate: payload.candidate,
         });
       }
     );
-
-    // ===================================================================
 
     socket.on("disconnect", () => {
       console.log(`🔴 User disconnected: ${socket.id}`);
@@ -304,17 +293,27 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
           isOnline: false,
           lastSeen: new Date(),
         });
-        emitUserStatusChange(user.userId, userStatuses.get(user.userId)!);
+        emitUserStatusChange(user.userId, userStatuses.get(user.userId)!); // Notify all clients
       }
-      // Notify any remaining user in any room that the other user has left.
-      io.emit("user-left", socket.id);
+
+      socket.rooms.forEach((room) => {
+        if (room !== socket.id) {
+          socket.to(room).emit("user-left", socket.id);
+        }
+      });
     });
   });
 };
 
+// You can optionally export a function to get the `io` instance
+// if you need to emit events from other parts of your application (e.g., REST controllers).
+
 export const getIo = (): SocketIOServer => {
+  // Corrected type: SocketIOServer
+
   if (!io) {
     throw new Error("Socket.IO server not initialized.");
   }
+
   return io;
 };
