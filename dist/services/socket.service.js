@@ -195,17 +195,19 @@ const initializeSocket = (ioInstance) => {
             }
         }));
         // --- WebRTC Signaling Events ---
-        socket.on("join-room", (roomId) => {
-            socket.join(roomId);
-            const clientsInRoom = io.sockets.adapter.rooms.get(roomId);
-            const numClients = clientsInRoom ? clientsInRoom.size : 0;
-            if (numClients === 2) {
-                const clients = Array.from(clientsInRoom);
-                io.to(clients[0]).emit("other-user", clients[1]);
-                io.to(clients[1]).emit("other-user", clients[0]);
-            }
+        // This is triggered when the mentee is ready to call.
+        socket.on("mentee-ready", (data) => {
+            socket
+                .to(data.roomId)
+                .emit("incoming-call", { menteeSocketId: socket.id });
         });
-        // 🔽🔽🔽 THESE WERE MISSING 🔽🔽🔽
+        // This is triggered when the mentor accepts the call.
+        socket.on("mentor-accepted", (data) => {
+            io.to(data.menteeSocketId).emit("mentor-joined", {
+                mentorSocketId: socket.id,
+            });
+        });
+        // These events relay the WebRTC connection data.
         socket.on("offer", (payload) => {
             io.to(payload.target).emit("offer", {
                 from: socket.id,
@@ -223,6 +225,10 @@ const initializeSocket = (ioInstance) => {
                 from: socket.id,
                 candidate: payload.candidate,
             });
+        });
+        // Handles joining the room initially.
+        socket.on("join-room", (roomId) => {
+            socket.join(roomId);
         });
         /**
          * Event listener for when a user disconnects.
