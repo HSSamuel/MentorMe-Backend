@@ -274,14 +274,14 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
 
     socket.on("offer", (payload: { target: string; offer: any }) => {
       io.to(payload.target).emit("offer", {
-        from: socket.id, // Changed from socketId
+        from: socket.id, // Should be 'from'
         offer: payload.offer,
       });
     });
 
     socket.on("answer", (payload: { target: string; answer: any }) => {
       io.to(payload.target).emit("answer", {
-        from: socket.id, // Changed from socketId
+        from: socket.id, // Should be 'from'
         answer: payload.answer,
       });
     });
@@ -290,7 +290,7 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
       "ice-candidate",
       (payload: { target: string; candidate: any }) => {
         io.to(payload.target).emit("ice-candidate", {
-          from: socket.id, // Changed from socketId
+          from: socket.id, // Should be 'from'
           candidate: payload.candidate,
         });
       }
