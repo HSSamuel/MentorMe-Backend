@@ -3,6 +3,8 @@ import {
   getNotifications,
   markAsRead,
   markAllAsRead,
+  deleteNotification,
+  deleteAllNotifications,
 } from "../controllers/notification.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 import { param } from "express-validator";
@@ -24,5 +26,17 @@ router.put(
   validateRequest,
   markAsRead
 );
+
+// Delete a single notification
+router.delete(
+  "/:notificationId",
+  authMiddleware,
+  [param("notificationId").isMongoId().withMessage("Invalid notification ID")],
+  validateRequest,
+  deleteNotification
+);
+
+// Delete all notifications for the logged-in user
+router.delete("/", authMiddleware, deleteAllNotifications);
 
 export default router;

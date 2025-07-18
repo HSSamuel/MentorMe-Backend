@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateVideoCallToken = exports.submitFeedback = exports.getMenteeSessions = exports.getMentorSessions = exports.createSession = exports.setAvailability = exports.getMentorAvailability = exports.getAvailability = void 0;
+exports.notifyMentorOfCall = exports.generateVideoCallToken = exports.submitFeedback = exports.getMenteeSessions = exports.getMentorSessions = exports.createSession = exports.setAvailability = exports.getMentorAvailability = exports.getAvailability = void 0;
 const client_1 = require("@prisma/client");
 const calendar_service_1 = require("../services/calendar.service");
 const getUserId_1 = require("../utils/getUserId");
@@ -267,7 +267,6 @@ const submitFeedback = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
 });
 exports.submitFeedback = submitFeedback;
-// --- THIS IS THE NEW FUNCTION TO ADD ---
 const generateVideoCallToken = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const userId = (0, getUserId_1.getUserId)(req);
     const { sessionId } = req.params;
@@ -283,18 +282,63 @@ const generateVideoCallToken = (req, res) => __awaiter(void 0, void 0, void 0, f
             },
         });
         if (!session) {
-            res.status(403).json({ message: 'You are not a participant of this session.' });
+            res
+                .status(403)
+                .json({ message: "You are not a participant of this session." });
             return;
         }
-        // Create a special, short-lived token just for this video call
-        const videoToken = jsonwebtoken_1.default.sign({ userId, sessionId }, // Payload contains both IDs for a unique signature
-        JWT_SECRET, { expiresIn: '1h' } // Token is valid for 1 hour
-        );
+        const videoToken = jsonwebtoken_1.default.sign({ userId, sessionId }, JWT_SECRET, {
+            expiresIn: "1h",
+        });
         res.status(200).json({ videoToken });
     }
     catch (error) {
         console.error("Error generating video call token:", error);
-        res.status(500).json({ message: 'Server error while generating token.' });
+        res.status(500).json({ message: "Server error while generating token." });
     }
 });
 exports.generateVideoCallToken = generateVideoCallToken;
+// --- THIS IS THE NEW FUNCTION THAT WAS ADDED ---
+const notifyMentorOfCall = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const menteeId = (0, getUserId_1.getUserId)(req);
+    const { sessionId } = req.params;
+    if (!menteeId) {
+        res.status(401).json({ message: "Authentication error" });
+        return;
+    }
+    try {
+        const session = yield prisma.session.findUnique({
+            where: { id: sessionId },
+            include: {
+                mentee: { include: { profile: true } },
+            },
+        });
+        if (!session || session.menteeId !== menteeId) {
+            res
+                .status(403)
+                .json({ message: "You are not the mentee for this session." });
+            return;
+        }
+        const { mentorId } = session;
+        const menteeName = ((_a = session.mentee.profile) === null || _a === void 0 ? void 0 : _a.name) || "Your mentee";
+        const notification = yield prisma.notification.create({
+            data: {
+                userId: mentorId,
+                type: "VIDEO_CALL_INITIATED",
+                message: `${menteeName} is calling you for your session.`,
+                link: `/session/${sessionId}/call`,
+                isRead: false,
+            },
+        });
+        const io = req.app.locals.io;
+        io.to(mentorId).emit("newNotification", notification);
+        console.log(`Notification sent to mentor ${mentorId} for video call.`);
+        res.status(200).json({ message: "Notification sent successfully." });
+    }
+    catch (error) {
+        console.error("Error sending call notification:", error);
+        res.status(500).json({ message: "Failed to send notification." });
+    }
+});
+exports.notifyMentorOfCall = notifyMentorOfCall;

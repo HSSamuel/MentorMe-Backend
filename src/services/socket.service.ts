@@ -5,10 +5,11 @@ import jwt from "jsonwebtoken";
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
 
-// This interface adds the 'user' property to the Socket object for type safety.
+// Updated interface to handle the unique video token payload
 interface CustomSocket extends Socket {
   user?: {
     userId: string;
+    sessionId: string; // The token now includes the session ID
   };
 }
 
@@ -30,18 +31,27 @@ const emitUserStatusChange = (
 
 export const initializeSocket = (ioInstance: SocketIOServer) => {
   io = ioInstance;
+  console.log("✅ Socket.IO service initialized.");
 
   // --- Authentication Middleware for all incoming socket connections ---
   io.use((socket: CustomSocket, next) => {
     const token = socket.handshake.auth.token;
     if (!token) {
+      console.error(
+        "Auth Error: Socket connection rejected. Token not provided."
+      );
       return next(new Error("Authentication error: Token not provided."));
     }
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-      socket.user = { userId: decoded.userId }; // Attach user info to the socket
+      // Decode the unique videoToken which contains both userId and sessionId
+      const decoded = jwt.verify(token, JWT_SECRET) as {
+        userId: string;
+        sessionId: string;
+      };
+      socket.user = { userId: decoded.userId, sessionId: decoded.sessionId };
       next();
     } catch (err) {
+      console.error("Auth Error: Socket connection rejected. Invalid token.");
       next(new Error("Authentication error: Invalid token."));
     }
   });
@@ -49,16 +59,21 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
   // --- Single, Unified Connection Handler ---
   io.on("connection", (socket: CustomSocket) => {
     const userId = socket.user?.userId;
+    const sessionId = socket.user?.sessionId; // Get sessionId from the authenticated token
 
-    if (!userId) {
-      console.error(`Socket ${socket.id} connected without a valid user ID.`);
+    if (!userId || !sessionId) {
+      console.error(
+        `Socket ${socket.id} connected but is missing user/session ID from its token.`
+      );
       socket.disconnect(true);
       return;
     }
 
-    console.log(`🟢 User connected: ${socket.id} | UserID: ${userId}`);
+    console.log(`\n🟢 User Connected:`);
+    console.log(`   - Socket ID: ${socket.id}`);
+    console.log(`   - User ID:   ${userId}`);
 
-    // --- User Presence and Status Handling ---
+    // --- User Presence and Status Handling (Existing Logic) ---
     socket.join(userId); // Join a personal room for direct notifications
     userStatuses.set(userId, { isOnline: true, lastSeen: null });
     emitUserStatusChange(userId, { isOnline: true, lastSeen: null });
@@ -68,7 +83,15 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
 
     // --- WebRTC Signaling Events ---
     socket.on("join-room", (roomId: string) => {
+      if (roomId !== sessionId) {
+        console.warn(
+          `   - WARNING: User ${userId} tried to join room ${roomId} but their token is for room ${sessionId}.`
+        );
+        return;
+      }
       socket.join(roomId);
+      console.log(`   - Action: User joined room ${roomId}`);
+
       const clientsInRoom = io.sockets.adapter.rooms.get(roomId);
       const otherUsers = Array.from(clientsInRoom || []).filter(
         (id) => id !== socket.id
@@ -76,27 +99,41 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
 
       if (otherUsers.length > 0) {
         const otherUserSocketId = otherUsers[0];
+        console.log(
+          `   - Signaling: Notifying ${socket.id} about existing user ${otherUserSocketId}`
+        );
         socket.emit("other-user", otherUserSocketId);
+      } else {
+        console.log(
+          `   - Signaling: User is the first in the room. Waiting for another user.`
+        );
       }
     });
 
-    // Using 'any' to bypass the persistent build errors
     socket.on("offer", (payload: { target: string; offer: any }) => {
+      console.log(
+        `   - Signaling: Relaying offer from ${socket.id} to ${payload.target}`
+      );
       io.to(payload.target).emit("offer", {
         from: socket.id,
         offer: payload.offer,
       });
     });
 
-    // Using 'any' to bypass the persistent build errors
     socket.on("answer", (payload: { target: string; answer: any }) => {
+      // --- THIS IS THE NEW LOG MESSAGE THAT WAS ADDED ---
+      console.log(
+        `✅ Video Connected: Signaling complete between ${socket.id} and ${payload.target}`
+      );
+      console.log(
+        `   - Signaling: Relaying answer from ${socket.id} to ${payload.target}`
+      );
       io.to(payload.target).emit("answer", {
         from: socket.id,
         answer: payload.answer,
       });
     });
 
-    // Using 'any' to bypass the persistent build errors
     socket.on(
       "ice-candidate",
       (payload: { target: string; candidate: any }) => {
@@ -107,31 +144,31 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
       }
     );
 
-    // When a user joins, if there's existing content for that room, send it to them.
+    // --- Shared Notepad Events (Existing Logic) ---
     socket.on("get-notepad-content", (roomId: string) => {
       const room = io.sockets.adapter.rooms.get(roomId);
       if (room) {
-        // @ts-ignore - We are attaching custom properties to the room object
+        // @ts-ignore
         const content = room.notepadContent || "";
         socket.emit("notepad-content", content);
       }
     });
 
-    // When a user types, update the content and broadcast it to the room.
     socket.on("notepad-change", (data: { roomId: string; content: string }) => {
       const room = io.sockets.adapter.rooms.get(data.roomId);
       if (room) {
-        // Store the content on the room object itself for persistence during the session.
         // @ts-ignore
         room.notepadContent = data.content;
       }
-      // Broadcast the change to everyone else in the room
       socket.to(data.roomId).emit("notepad-content", data.content);
     });
 
     // --- Disconnect Handler ---
     socket.on("disconnect", () => {
-      console.log(`🔴 User disconnected: ${socket.id} | UserID: ${userId}`);
+      console.log(`\n🔴 User Disconnected:`);
+      console.log(`   - Socket ID: ${socket.id}`);
+      console.log(`   - User ID:   ${userId}`);
+
       const lastSeenTime = new Date();
       userStatuses.set(userId, { isOnline: false, lastSeen: lastSeenTime });
       emitUserStatusChange(userId, { isOnline: false, lastSeen: lastSeenTime });

@@ -122,6 +122,7 @@ model Notification {
   isRead    Boolean          @default(false)
   link      String?
   createdAt DateTime         @default(now())
+  @@index([userId])
 }
 
 model Availability {
@@ -192,4 +193,5 @@ enum NotificationType {
   NEW_MESSAGE
   GOAL_COMPLETED
   AVAILABILITY_UPDATED
+  VIDEO_CALL_INITIATED
 }

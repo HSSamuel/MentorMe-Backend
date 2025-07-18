@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.markAllAsRead = exports.markAsRead = exports.getNotifications = void 0;
+exports.deleteAllNotifications = exports.deleteNotification = exports.markAllAsRead = exports.markAsRead = exports.getNotifications = void 0;
 const client_1 = require("@prisma/client");
 const prisma = new client_1.PrismaClient();
 const getUserId = (req) => {
@@ -82,3 +82,50 @@ const markAllAsRead = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.markAllAsRead = markAllAsRead;
+const deleteNotification = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const userId = getUserId(req);
+    const { notificationId } = req.params;
+    if (!userId) {
+        res.status(401).json({ message: "Authentication error" });
+        return;
+    }
+    try {
+        const notification = yield prisma.notification.findUnique({
+            where: { id: notificationId },
+        });
+        if (!notification || notification.userId !== userId) {
+            res
+                .status(403)
+                .json({
+                message: "You are not authorized to delete this notification.",
+            });
+            return;
+        }
+        yield prisma.notification.delete({ where: { id: notificationId } });
+        res.status(200).json({ message: "Notification deleted successfully." });
+    }
+    catch (error) {
+        res.status(500).json({ message: "Error deleting notification." });
+    }
+});
+exports.deleteNotification = deleteNotification;
+// --- THIS IS THE CORRECTED FUNCTION ---
+const deleteAllNotifications = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const userId = getUserId(req);
+    // This check ensures that the function stops if the user is not authenticated.
+    if (!userId) {
+        res.status(401).json({ message: "Authentication error" });
+        return;
+    }
+    try {
+        // The TypeScript compiler now knows for certain that 'userId' is a string here.
+        yield prisma.notification.deleteMany({
+            where: { userId: userId },
+        });
+        res.status(200).json({ message: "All notifications deleted successfully." });
+    }
+    catch (error) {
+        res.status(500).json({ message: "Error deleting all notifications." });
+    }
+});
+exports.deleteAllNotifications = deleteAllNotifications;

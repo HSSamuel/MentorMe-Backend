@@ -1,5 +1,4 @@
 "use strict";
-// Mentor/Backend/src/routes/session.routes.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const session_controller_1 = require("../controllers/session.controller");
@@ -35,4 +34,7 @@ router.put("/:id/feedback", auth_middleware_1.authMiddleware, [
         .withMessage("Comment must be a string"),
 ], validateRequest_1.validateRequest, session_controller_1.submitFeedback);
 router.post("/:sessionId/call-token", auth_middleware_1.authMiddleware, [(0, express_validator_1.param)("sessionId").isMongoId().withMessage("Invalid session ID")], validateRequest_1.validateRequest, session_controller_1.generateVideoCallToken);
+// Mentee calls this endpoint to notify the mentor they are in the video call
+router.post("/:sessionId/notify-call", auth_middleware_1.authMiddleware, auth_middleware_1.menteeMiddleware, // Ensures only the mentee can trigger this
+[(0, express_validator_1.param)("sessionId").isMongoId().withMessage("Invalid session ID")], validateRequest_1.validateRequest, session_controller_1.notifyMentorOfCall);
 exports.default = router;

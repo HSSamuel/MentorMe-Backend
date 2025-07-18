@@ -12,4 +12,8 @@ router.get("/", auth_middleware_1.authMiddleware, notification_controller_1.getN
 router.put("/read-all", auth_middleware_1.authMiddleware, notification_controller_1.markAllAsRead);
 // Mark a single notification as read
 router.put("/:id/read", auth_middleware_1.authMiddleware, [(0, express_validator_1.param)("id").isMongoId().withMessage("Invalid notification ID")], validateRequest_1.validateRequest, notification_controller_1.markAsRead);
+// Delete a single notification
+router.delete("/:notificationId", auth_middleware_1.authMiddleware, [(0, express_validator_1.param)("notificationId").isMongoId().withMessage("Invalid notification ID")], validateRequest_1.validateRequest, notification_controller_1.deleteNotification);
+// Delete all notifications for the logged-in user
+router.delete("/", auth_middleware_1.authMiddleware, notification_controller_1.deleteAllNotifications);
 exports.default = router;

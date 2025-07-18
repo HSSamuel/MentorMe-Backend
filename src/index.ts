@@ -57,7 +57,6 @@ const corsOptions = {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.warn(`CORS: Origin '${origin}' not allowed.`);
       callback(new Error("Not allowed by CORS"));
     }
   },
@@ -123,15 +122,19 @@ app.get("/", (req, res) => {
 
 app.use(jsonErrorHandler);
 
-// --- Server and Socket.IO Initialization ---
 const httpServer = createServer(app);
+
 const io = new SocketIOServer(httpServer, {
-  // --- THIS IS THE CORRECTED CONFIGURATION ---
-  // It now uses the same robust corsOptions object as the main Express app.
-  cors: corsOptions,
+  cors: {
+    origin: "*", // Keep this permissive for development to ensure no connection issues
+    methods: ["GET", "POST"],
+  },
 });
 
-// Initialize the single source of truth for all socket events
+// --- THIS IS THE LINE THAT FIXES THE ERROR ---
+// It makes the 'io' instance globally available to all controllers via the request object.
+app.locals.io = io;
+
 initializeSocket(io);
 
 // --- Start Server ---

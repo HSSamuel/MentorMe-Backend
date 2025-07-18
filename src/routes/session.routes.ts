@@ -1,5 +1,3 @@
-// Mentor/Backend/src/routes/session.routes.ts
-
 import { Router } from "express";
 import {
   setAvailability,
@@ -9,7 +7,8 @@ import {
   getMentorSessions,
   getMenteeSessions,
   submitFeedback,
-  generateVideoCallToken, // Added this import
+  generateVideoCallToken,
+  notifyMentorOfCall,
 } from "../controllers/session.controller";
 import {
   authMiddleware,
@@ -92,6 +91,16 @@ router.post(
   [param("sessionId").isMongoId().withMessage("Invalid session ID")],
   validateRequest,
   generateVideoCallToken
+);
+
+// Mentee calls this endpoint to notify the mentor they are in the video call
+router.post(
+  "/:sessionId/notify-call",
+  authMiddleware,
+  menteeMiddleware, // Ensures only the mentee can trigger this
+  [param("sessionId").isMongoId().withMessage("Invalid session ID")],
+  validateRequest,
+  notifyMentorOfCall
 );
 
 export default router;

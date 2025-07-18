@@ -61,7 +61,6 @@ const corsOptions = {
             callback(null, true);
         }
         else {
-            console.warn(`CORS: Origin '${origin}' not allowed.`);
             callback(new Error("Not allowed by CORS"));
         }
     },
@@ -113,14 +112,16 @@ app.get("/", (req, res) => {
     res.send("Mentor Backend API is running!");
 });
 app.use(error_middleware_1.jsonErrorHandler);
-// --- Server and Socket.IO Initialization ---
 const httpServer = (0, http_1.createServer)(app);
 const io = new socket_io_1.Server(httpServer, {
-    // --- THIS IS THE CORRECTED CONFIGURATION ---
-    // It now uses the same robust corsOptions object as the main Express app.
-    cors: corsOptions,
+    cors: {
+        origin: "*", // Keep this permissive for development to ensure no connection issues
+        methods: ["GET", "POST"],
+    },
 });
-// Initialize the single source of truth for all socket events
+// --- THIS IS THE LINE THAT FIXES THE ERROR ---
+// It makes the 'io' instance globally available to all controllers via the request object.
+app.locals.io = io;
 (0, socket_service_1.initializeSocket)(io);
 // --- Start Server ---
 const startServer = () => __awaiter(void 0, void 0, void 0, function* () {
