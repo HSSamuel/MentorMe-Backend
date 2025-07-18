@@ -34,4 +34,5 @@ router.put("/:id/feedback", auth_middleware_1.authMiddleware, [
         .isString()
         .withMessage("Comment must be a string"),
 ], validateRequest_1.validateRequest, session_controller_1.submitFeedback);
+router.post("/:sessionId/call-token", auth_middleware_1.authMiddleware, [(0, express_validator_1.param)("sessionId").isMongoId().withMessage("Invalid session ID")], validateRequest_1.validateRequest, session_controller_1.generateVideoCallToken);
 exports.default = router;

@@ -107,6 +107,28 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
       }
     );
 
+    // When a user joins, if there's existing content for that room, send it to them.
+    socket.on("get-notepad-content", (roomId: string) => {
+      const room = io.sockets.adapter.rooms.get(roomId);
+      if (room) {
+        // @ts-ignore - We are attaching custom properties to the room object
+        const content = room.notepadContent || "";
+        socket.emit("notepad-content", content);
+      }
+    });
+
+    // When a user types, update the content and broadcast it to the room.
+    socket.on("notepad-change", (data: { roomId: string; content: string }) => {
+      const room = io.sockets.adapter.rooms.get(data.roomId);
+      if (room) {
+        // Store the content on the room object itself for persistence during the session.
+        // @ts-ignore
+        room.notepadContent = data.content;
+      }
+      // Broadcast the change to everyone else in the room
+      socket.to(data.roomId).emit("notepad-content", data.content);
+    });
+
     // --- Disconnect Handler ---
     socket.on("disconnect", () => {
       console.log(`🔴 User disconnected: ${socket.id} | UserID: ${userId}`);

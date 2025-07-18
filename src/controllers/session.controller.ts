@@ -3,8 +3,10 @@ import { PrismaClient } from "@prisma/client";
 import { createCalendarEvent } from "../services/calendar.service";
 import { getUserId } from "../utils/getUserId";
 import { awardPoints } from "../services/gamification.service";
+import jwt from "jsonwebtoken";
 
 const prisma = new PrismaClient();
+const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
 
 const getUserRole = (req: Request): string | null => {
   if (!req.user) return null;
@@ -291,5 +293,43 @@ export const submitFeedback = async (
     res.status(200).json(updatedSession);
   } catch (error) {
     res.status(500).json({ message: "Error submitting feedback." });
+  }
+};
+
+// --- THIS IS THE NEW FUNCTION TO ADD ---
+export const generateVideoCallToken = async (req: Request, res: Response): Promise<void> => {
+  const userId = getUserId(req);
+  const { sessionId } = req.params;
+
+  if (!userId) {
+    res.status(401).json({ message: "Authentication required." });
+    return;
+  }
+
+  try {
+    const session = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        OR: [{ menteeId: userId }, { mentorId: userId }],
+      },
+    });
+
+    if (!session) {
+      res.status(403).json({ message: 'You are not a participant of this session.' });
+      return;
+    }
+
+    // Create a special, short-lived token just for this video call
+    const videoToken = jwt.sign(
+      { userId, sessionId }, // Payload contains both IDs for a unique signature
+      JWT_SECRET,
+      { expiresIn: '1h' } // Token is valid for 1 hour
+    );
+
+    res.status(200).json({ videoToken });
+
+  } catch (error) {
+    console.error("Error generating video call token:", error);
+    res.status(500).json({ message: 'Server error while generating token.' });
   }
 };

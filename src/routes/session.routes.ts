@@ -3,12 +3,13 @@
 import { Router } from "express";
 import {
   setAvailability,
-  getAvailability, // Import new function
-  getMentorAvailability, // Import new function
+  getAvailability,
+  getMentorAvailability,
   createSession,
   getMentorSessions,
   getMenteeSessions,
   submitFeedback,
+  generateVideoCallToken, // Added this import
 } from "../controllers/session.controller";
 import {
   authMiddleware,
@@ -83,6 +84,14 @@ router.put(
   ],
   validateRequest,
   submitFeedback
+);
+
+router.post(
+  "/:sessionId/call-token",
+  authMiddleware,
+  [param("sessionId").isMongoId().withMessage("Invalid session ID")],
+  validateRequest,
+  generateVideoCallToken
 );
 
 export default router;

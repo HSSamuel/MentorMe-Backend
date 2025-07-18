@@ -8,13 +8,18 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.submitFeedback = exports.getMenteeSessions = exports.getMentorSessions = exports.createSession = exports.setAvailability = exports.getMentorAvailability = exports.getAvailability = void 0;
+exports.generateVideoCallToken = exports.submitFeedback = exports.getMenteeSessions = exports.getMentorSessions = exports.createSession = exports.setAvailability = exports.getMentorAvailability = exports.getAvailability = void 0;
 const client_1 = require("@prisma/client");
 const calendar_service_1 = require("../services/calendar.service");
 const getUserId_1 = require("../utils/getUserId");
 const gamification_service_1 = require("../services/gamification.service");
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const prisma = new client_1.PrismaClient();
+const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
 const getUserRole = (req) => {
     if (!req.user)
         return null;
@@ -262,3 +267,34 @@ const submitFeedback = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
 });
 exports.submitFeedback = submitFeedback;
+// --- THIS IS THE NEW FUNCTION TO ADD ---
+const generateVideoCallToken = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const userId = (0, getUserId_1.getUserId)(req);
+    const { sessionId } = req.params;
+    if (!userId) {
+        res.status(401).json({ message: "Authentication required." });
+        return;
+    }
+    try {
+        const session = yield prisma.session.findFirst({
+            where: {
+                id: sessionId,
+                OR: [{ menteeId: userId }, { mentorId: userId }],
+            },
+        });
+        if (!session) {
+            res.status(403).json({ message: 'You are not a participant of this session.' });
+            return;
+        }
+        // Create a special, short-lived token just for this video call
+        const videoToken = jsonwebtoken_1.default.sign({ userId, sessionId }, // Payload contains both IDs for a unique signature
+        JWT_SECRET, { expiresIn: '1h' } // Token is valid for 1 hour
+        );
+        res.status(200).json({ videoToken });
+    }
+    catch (error) {
+        console.error("Error generating video call token:", error);
+        res.status(500).json({ message: 'Server error while generating token.' });
+    }
+});
+exports.generateVideoCallToken = generateVideoCallToken;
