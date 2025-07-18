@@ -3,7 +3,7 @@
     /* Base Options */
     "target": "es2016",
     "module": "commonjs",
-    "lib": ["es2016"],
+    "lib": ["es2016", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
 
     /* Strict Type-Checking Options */
@@ -13,6 +13,9 @@
     /* Module Resolution Options */
     "esModuleInterop": true,
     "resolveJsonModule": true,
+
+    /* Explicitly include WebRTC types */
+    "types": ["node", "webrtc"],
 
     /* Build Path Options */
     "outDir": "./dist",
