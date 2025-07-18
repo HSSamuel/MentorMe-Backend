@@ -5,8 +5,8 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "npm run clean && tsc",
-    "dev": "ts-node src/index.ts",
-    "start": "node --max-old-space-size=4096 dist/index.js",
+    "start": "node dist/index.js",
+    "dev": "nodemon src/index.ts",
     "postinstall": "npx prisma generate"
   },
   "keywords": [],
@@ -62,6 +62,8 @@
     "@types/zxcvbn": "^4.4.4",
     "nodemon": "^3.1.10",
     "prisma": "^6.11.1",
-    "rimraf": "^5.0.7"
+    "rimraf": "^5.0.7",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.0"
   }
 }

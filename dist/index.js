@@ -1,5 +1,4 @@
 "use strict";
-// Mentor/Backend/src/index.ts
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -117,11 +116,9 @@ app.use(error_middleware_1.jsonErrorHandler);
 // --- Server and Socket.IO Initialization ---
 const httpServer = (0, http_1.createServer)(app);
 const io = new socket_io_1.Server(httpServer, {
-    cors: {
-        origin: allowedOrigins,
-        methods: ["GET", "POST"],
-        credentials: true,
-    },
+    // --- THIS IS THE CORRECTED CONFIGURATION ---
+    // It now uses the same robust corsOptions object as the main Express app.
+    cors: corsOptions,
 });
 // Initialize the single source of truth for all socket events
 (0, socket_service_1.initializeSocket)(io);

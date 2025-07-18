@@ -1,5 +1,3 @@
-// Mentor/Backend/src/index.ts
-
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -128,11 +126,9 @@ app.use(jsonErrorHandler);
 // --- Server and Socket.IO Initialization ---
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
-  cors: {
-    origin: allowedOrigins,
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
+  // --- THIS IS THE CORRECTED CONFIGURATION ---
+  // It now uses the same robust corsOptions object as the main Express app.
+  cors: corsOptions,
 });
 
 // Initialize the single source of truth for all socket events
