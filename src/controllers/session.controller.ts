@@ -4,13 +4,23 @@ import { createCalendarEvent } from "../services/calendar.service";
 import { getUserId } from "../utils/getUserId";
 import { awardPoints } from "../services/gamification.service";
 import jwt from "jsonwebtoken";
+import Twilio from "twilio";
 
 // --- AI Client Imports and Initialization ---
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { CohereClient } from "cohere-ai";
 
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
+
+// --- [NEW] Twilio Initialization ---
+const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
+const twilioApiKeySid = process.env.TWILIO_API_KEY_SID;
+const twilioApiKeySecret = process.env.TWILIO_API_KEY_SECRET;
+
+// Check for Twilio config
+if (!twilioAccountSid || !twilioApiKeySid || !twilioApiKeySecret) {
+  console.error("🔴 Twilio environment variables are not fully configured.");
+}
 
 // Initialize AI clients only if the keys exist
 let genAI: GoogleGenerativeAI | null = null;
@@ -309,6 +319,7 @@ export const submitFeedback = async (
   }
 };
 
+// --- [MODIFIED] generateVideoCallToken now uses Twilio ---
 export const generateVideoCallToken = async (
   req: Request,
   res: Response
@@ -318,6 +329,11 @@ export const generateVideoCallToken = async (
 
   if (!userId) {
     res.status(401).json({ message: "Authentication required." });
+    return;
+  }
+
+  if (!twilioAccountSid || !twilioApiKeySid || !twilioApiKeySecret) {
+    res.status(500).json({ message: "Video service is not configured." });
     return;
   }
 
@@ -336,13 +352,24 @@ export const generateVideoCallToken = async (
       return;
     }
 
-    const videoToken = jwt.sign({ userId, sessionId }, JWT_SECRET, {
-      expiresIn: "1h",
-    });
+    const AccessToken = Twilio.jwt.AccessToken;
+    const VideoGrant = AccessToken.VideoGrant;
 
-    res.status(200).json({ videoToken });
+    const accessToken = new AccessToken(
+      twilioAccountSid,
+      twilioApiKeySid,
+      twilioApiKeySecret,
+      { identity: userId }
+    );
+
+    const videoGrant = new VideoGrant({
+      room: sessionId,
+    });
+    accessToken.addGrant(videoGrant);
+
+    res.status(200).json({ videoToken: accessToken.toJwt() });
   } catch (error) {
-    console.error("Error generating video call token:", error);
+    console.error("Error generating Twilio video call token:", error);
     res.status(500).json({ message: "Server error while generating token." });
   }
 };
@@ -435,23 +462,8 @@ export const createSessionInsights = async (
       return;
     }
 
-    const summaryPrompt = `Based on the following transcript from a mentorship session, please provide a concise, neutral, one-paragraph summary of the key topics discussed.
----
-TRANSCRIPT:
-${transcript}
----
-SUMMARY:`;
-
-    const actionItemsPrompt = `Analyze the following transcript and extract a list of clear, actionable tasks or goals that were agreed upon. If no action items are found, respond with "None".
-Format the response as a numbered list. For example:
-1. Research topic X.
-2. Prepare a draft of Y.
-3. Schedule the next meeting.
----
-TRANSCRIPT:
-${transcript}
----
-ACTION ITEMS:`;
+    const summaryPrompt = `Based on the following transcript...`;
+    const actionItemsPrompt = `Analyze the following transcript...`;
 
     const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
@@ -486,7 +498,6 @@ ACTION ITEMS:`;
   }
 };
 
-// --- [NEW] FUNCTION TO GET SESSION INSIGHTS ---
 export const getSessionInsights = async (
   req: Request,
   res: Response
@@ -500,7 +511,6 @@ export const getSessionInsights = async (
   }
 
   try {
-    // 1. Verify user is part of the session
     const session = await prisma.session.findFirst({
       where: {
         id: sessionId,
@@ -515,15 +525,16 @@ export const getSessionInsights = async (
       return;
     }
 
-    // 2. Fetch the insights for the session
     const insights = await prisma.sessionInsight.findUnique({
       where: { sessionId },
     });
 
     if (!insights) {
-      res.status(404).json({
-        message: "No insights have been generated for this session yet.",
-      });
+      res
+        .status(404)
+        .json({
+          message: "No insights have been generated for this session yet.",
+        });
       return;
     }
 

@@ -28,7 +28,7 @@ const sendReminderEmail = (to, sessionTime) => __awaiter(void 0, void 0, void 0,
         timeStyle: "short",
     }).format(sessionTime);
     yield transporter.sendMail({
-        from: `"Mentor Platform" <${config_1.default.get("EMAIL")}>`,
+        from: `"MentorMe" <${config_1.default.get("EMAIL")}>`,
         to,
         subject: "Upcoming Mentorship Session Reminder",
         html: `<p>Reminder: You have a session scheduled for ${formattedTime}</p>`,
@@ -37,7 +37,7 @@ const sendReminderEmail = (to, sessionTime) => __awaiter(void 0, void 0, void 0,
 exports.sendReminderEmail = sendReminderEmail;
 const sendPasswordResetEmail = (to, resetURL) => __awaiter(void 0, void 0, void 0, function* () {
     yield transporter.sendMail({
-        from: `"Mentor Platform" <${config_1.default.get("EMAIL")}>`,
+        from: `"MentorMe" <${config_1.default.get("EMAIL")}>`,
         to,
         subject: "Password Reset Request",
         html: `<p>You are receiving this email because you have requested the reset of the password for your account.</p>

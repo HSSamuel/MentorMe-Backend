@@ -1,49 +1,30 @@
 import { Server as SocketIOServer, Socket } from "socket.io";
-import { PrismaClient } from "@prisma/client";
 import jwt from "jsonwebtoken";
 
-const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
 
+// Use a simpler socket type as we only need the user's ID
 interface CustomSocket extends Socket {
-  user?: {
-    userId: string;
-    sessionId: string;
-  };
+  user?: { userId: string };
 }
 
 let io: SocketIOServer;
 
-// User presence logic (no changes)
-const userStatuses = new Map<
-  string,
-  { isOnline: boolean; lastSeen: Date | null }
->();
-const emitUserStatusChange = (
-  userId: string,
-  status: { isOnline: boolean; lastSeen: Date | null }
-) => {
-  if (io) {
-    io.emit("userStatusChange", { userId, ...status });
-  }
-};
-
 export const initializeSocket = (ioInstance: SocketIOServer) => {
   io = ioInstance;
-  console.log("✅ Socket.IO service initialized.");
+  console.log("✅ Real-time data socket service initialized.");
 
-  // Authentication (no changes)
+  // Use the main application's JWT for authentication
+  // This token is different from the Twilio video token
   io.use((socket: CustomSocket, next) => {
     const token = socket.handshake.auth.token;
     if (!token) {
       return next(new Error("Authentication error: Token not provided."));
     }
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as {
-        userId: string;
-        sessionId: string;
-      };
-      socket.user = { userId: decoded.userId, sessionId: decoded.sessionId };
+      // We only need the userId from the standard app token
+      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+      socket.user = { userId: decoded.userId };
       next();
     } catch (err) {
       next(new Error("Authentication error: Invalid token."));
@@ -52,100 +33,43 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
 
   io.on("connection", (socket: CustomSocket) => {
     const userId = socket.user?.userId;
-    const sessionId = socket.user?.sessionId;
-
-    if (!userId || !sessionId) {
-      socket.disconnect(true);
-      return;
+    if (!userId) {
+      return socket.disconnect(true);
     }
 
     console.log(
-      `\n🟢 User Connected: Socket ID ${socket.id}, User ID ${userId}`
+      `\n🟢 Data socket connected: Socket ID ${socket.id}, User ID ${userId}`
     );
-    socket.join(userId);
-    userStatuses.set(userId, { isOnline: true, lastSeen: null });
-    emitUserStatusChange(userId, { isOnline: true, lastSeen: null });
-    prisma.user
-      .update({ where: { id: userId }, data: { lastSeen: new Date() } })
-      .catch(console.error);
 
-    // --- [CORRECTED & SIMPLIFIED] WebRTC Signaling Events ---
-    socket.on("join-room", (roomId: string) => {
-      if (roomId !== sessionId) {
-        console.warn(
-          `[AUTH_WARN] User ${userId} blocked from joining wrong room ${roomId}.`
-        );
-        return;
-      }
+    // --- Event Handlers for Data Features ---
+
+    // Allows the client to join a specific room for chat and notepad updates
+    socket.on("join-data-room", (roomId: string) => {
       socket.join(roomId);
-      console.log(`[JOIN] User ${socket.id} joined room ${roomId}`);
-
-      const clientsInRoom = io.sockets.adapter.rooms.get(roomId);
-      const otherUsers = Array.from(clientsInRoom || []).filter(
-        (id) => id !== socket.id
-      );
-
-      if (otherUsers.length > 0) {
-        const otherUserSocketId = otherUsers[0];
-        console.log(
-          `[SIGNAL] Other user ${otherUserSocketId} found. Notifying ${socket.id} to start the call.`
-        );
-        socket.emit("other-user", otherUserSocketId);
-      } else {
-        console.log(
-          `[SIGNAL] User ${socket.id} is the first in the room. Waiting...`
-        );
-      }
+      console.log(`[Data] User ${socket.id} joined data room ${roomId}`);
     });
 
-    // --- All other signaling events are just relays (no changes) ---
-    socket.on("offer", (payload: { target: string; offer: any }) => {
-      console.log(
-        `[SIGNAL] Relaying OFFER from ${socket.id} to ${payload.target}`
-      );
-      io.to(payload.target).emit("offer", {
-        from: socket.id,
-        offer: payload.offer,
-      });
+    // Handles real-time updates for the shared notepad
+    socket.on("notepad-change", (data: { roomId: string; content: string }) => {
+      // Broadcast the change to everyone else in the room
+      socket.to(data.roomId).emit("notepad-update", data.content);
     });
 
-    socket.on("answer", (payload: { target: string; answer: any }) => {
-      console.log(
-        `[SIGNAL] Relaying ANSWER from ${socket.id} to ${payload.target}`
-      );
-      io.to(payload.target).emit("answer", {
-        from: socket.id,
-        answer: payload.answer,
-      });
-    });
-
+    // Handles sending and receiving real-time chat messages
     socket.on(
-      "ice-candidate",
-      (payload: { target: string; candidate: any }) => {
-        io.to(payload.target).emit("ice-candidate", {
-          from: socket.id,
-          candidate: payload.candidate,
+      "send-chat-message",
+      (data: { roomId: string; message: string; senderName: string }) => {
+        // Broadcast the message to everyone else in the room
+        socket.to(data.roomId).emit("new-chat-message", {
+          message: data.message,
+          senderName: data.senderName,
+          socketId: socket.id, // Identify the sender
         });
       }
     );
 
-    // Notepad and Disconnect logic (no changes)
-    // ...
-
     socket.on("disconnect", () => {
-      // ... disconnect logic
-      socket.rooms.forEach((room) => {
-        if (room !== socket.id) {
-          socket.to(room).emit("user-left", socket.id);
-        }
-      });
+      console.log(`\n🔴 Data socket disconnected: Socket ID ${socket.id}`);
     });
   });
-};
-
-export const getIo = (): SocketIOServer => {
-  if (!io) {
-    throw new Error("Socket.IO server not initialized.");
-  }
-  return io;
 };
