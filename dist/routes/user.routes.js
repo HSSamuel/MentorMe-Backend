@@ -15,12 +15,13 @@ router.put("/me/profile", auth_middleware_1.authMiddleware, fileUpload_middlewar
     (0, express_validator_1.body)("goals").notEmpty().withMessage("Goals are required").trim().escape(),
 ], validateRequest_1.validateRequest, user_controller_1.updateMyProfile);
 router.get("/me/profile", auth_middleware_1.authMiddleware, user_controller_1.getMyProfile);
-router.get("/mentor/:id/stats", auth_middleware_1.authMiddleware, user_controller_1.getMentorStats);
+// --- [NEW] ROUTES FOR DASHBOARD STATISTICS ---
+router.get("/mentor/:id/stats", auth_middleware_1.authMiddleware, [(0, express_validator_1.param)("id").isMongoId().withMessage("Invalid mentor ID")], validateRequest_1.validateRequest, user_controller_1.getMentorStats);
 router.get("/mentee/stats", auth_middleware_1.authMiddleware, user_controller_1.getMenteeStats);
+// --- END OF NEW ROUTES ---
 router.get("/mentors", auth_middleware_1.authMiddleware, user_controller_1.getAllMentors);
 router.get("/skills", auth_middleware_1.authMiddleware, user_controller_1.getAvailableSkills);
 router.get("/mentors/recommended", auth_middleware_1.authMiddleware, user_controller_1.getRecommendedMentors);
 // [FIX]: The generic '/:id' route is moved to the end.
-// This ensures that specific routes like '/mentors' and '/skills' are matched first.
 router.get("/:id", [(0, express_validator_1.param)("id").isMongoId().withMessage("Invalid user ID")], validateRequest_1.validateRequest, user_controller_1.getUserPublicProfile);
 exports.default = router;

@@ -8,7 +8,8 @@ declare global {
 export const prisma =
   global.prisma ||
   new PrismaClient({
-    log: ["query", "info", "warn", "error"], // Optional: Provides more detailed logging for debugging.
+    // The "query" and "info" levels have been removed to clean up the console.
+    log: ["warn", "error"],
   });
 
 // In a non-production environment, we assign the prisma instance to the global object.

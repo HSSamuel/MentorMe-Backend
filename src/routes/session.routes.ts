@@ -9,6 +9,8 @@ import {
   submitFeedback,
   generateVideoCallToken,
   notifyMentorOfCall,
+  createSessionInsights,
+  getSessionInsights, // 1. Import the new controller
 } from "../controllers/session.controller";
 import {
   authMiddleware,
@@ -101,6 +103,33 @@ router.post(
   [param("sessionId").isMongoId().withMessage("Invalid session ID")],
   validateRequest,
   notifyMentorOfCall
+);
+
+// --- ROUTES FOR SESSION INSIGHTS ---
+
+// POST: Any authenticated user (mentor or mentee) can create insights after a call
+router.post(
+  "/:sessionId/insights",
+  authMiddleware,
+  [
+    param("sessionId").isMongoId().withMessage("Invalid session ID"),
+    body("transcript")
+      .isString()
+      .withMessage("Transcript must be a string.")
+      .isLength({ min: 50 })
+      .withMessage("Transcript must be at least 50 characters long."),
+  ],
+  validateRequest,
+  createSessionInsights
+);
+
+// GET: Any authenticated participant can retrieve the insights for a session
+router.get(
+  "/:sessionId/insights",
+  authMiddleware,
+  [param("sessionId").isMongoId().withMessage("Invalid session ID")],
+  validateRequest,
+  getSessionInsights
 );
 
 export default router;

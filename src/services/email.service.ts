@@ -16,7 +16,7 @@ export const sendReminderEmail = async (to: string, sessionTime: Date) => {
   }).format(sessionTime);
 
   await transporter.sendMail({
-    from: `"Mentor Platform" <${config.get("EMAIL")}>`,
+    from: `"MentorMe" <${config.get("EMAIL")}>`,
     to,
     subject: "Upcoming Mentorship Session Reminder",
     html: `<p>Reminder: You have a session scheduled for ${formattedTime}</p>`,
@@ -25,7 +25,7 @@ export const sendReminderEmail = async (to: string, sessionTime: Date) => {
 
 export const sendPasswordResetEmail = async (to: string, resetURL: string) => {
   await transporter.sendMail({
-    from: `"Mentor Platform" <${config.get("EMAIL")}>`,
+    from: `"MentorMe" <${config.get("EMAIL")}>`,
     to,
     subject: "Password Reset Request",
     html: `<p>You are receiving this email because you have requested the reset of the password for your account.</p>

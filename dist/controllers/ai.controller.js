@@ -9,11 +9,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteAIConversation = exports.handleFileAnalysis = exports.handleCohereChat = exports.handleAIChat = exports.getAIMessages = exports.getAIConversations = void 0;
+exports.getAiMentorMatches = exports.deleteAIConversation = exports.handleFileAnalysis = exports.handleCohereChat = exports.handleAIChat = exports.getAIMessages = exports.getAIConversations = void 0;
 const generative_ai_1 = require("@google/generative-ai");
 const client_1 = require("@prisma/client");
 const cohere_ai_1 = require("cohere-ai");
 const getUserId_1 = require("../utils/getUserId");
+const ai_service_1 = require("../services/ai.service");
 // --- Initialization ---
 if (!process.env.GEMINI_API_KEY || !process.env.COHERE_API_KEY) {
     console.error("🔴 AI API keys are not set in environment variables.");
@@ -24,7 +25,80 @@ const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GEMINI_API_KEY)
 const cohere = new cohere_ai_1.CohereClient({
     token: process.env.COHERE_API_KEY,
 });
-// --- Route Handlers (getAIConversations, getAIMessages, etc. remain unchanged) ---
+// --- HELPER FUNCTION TO GET USER CONTEXT ---
+const getUserContext = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const [mentorships, sessions] = yield prisma.$transaction([
+            prisma.mentorshipRequest.findMany({
+                where: {
+                    OR: [{ menteeId: userId }, { mentorId: userId }],
+                    status: "ACCEPTED",
+                },
+                include: {
+                    goals: {
+                        where: {
+                            status: { not: "COMPLETED" },
+                        },
+                        select: {
+                            title: true,
+                            description: true,
+                            dueDate: true,
+                        },
+                    },
+                },
+            }),
+            prisma.session.findMany({
+                where: {
+                    OR: [{ menteeId: userId }, { mentorId: userId }],
+                    date: { gte: new Date() },
+                },
+                include: {
+                    mentor: {
+                        include: {
+                            profile: {
+                                select: { name: true },
+                            },
+                        },
+                    },
+                    mentee: {
+                        include: {
+                            profile: {
+                                select: { name: true },
+                            },
+                        },
+                    },
+                },
+                orderBy: { date: "asc" },
+                take: 3,
+            }),
+        ]);
+        const allGoals = mentorships.flatMap((m) => m.goals);
+        let context = "";
+        if (allGoals.length > 0) {
+            const goalStrings = allGoals.map((g) => {
+                var _a;
+                return `- ${g.title} (Due: ${((_a = g.dueDate) === null || _a === void 0 ? void 0 : _a.toLocaleDateString()) || "N/A"}): ${g.description}`;
+            });
+            context += "CURRENT GOALS:\n" + goalStrings.join("\n") + "\n\n";
+        }
+        if (sessions.length > 0) {
+            const sessionStrings = sessions.map((s) => {
+                var _a, _b;
+                const otherPersonName = s.mentor.id === userId
+                    ? (_a = s.mentee.profile) === null || _a === void 0 ? void 0 : _a.name
+                    : (_b = s.mentor.profile) === null || _b === void 0 ? void 0 : _b.name;
+                return `- Session with ${otherPersonName || "your counterpart"} on ${s.date.toLocaleString()}`;
+            });
+            context += "UPCOMING SESSIONS:\n" + sessionStrings.join("\n") + "\n\n";
+        }
+        return context;
+    }
+    catch (error) {
+        console.error(`Failed to fetch context for user ${userId}:`, error);
+        return "";
+    }
+});
+// --- EXISTING ROUTE HANDLERS ---
 const getAIConversations = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const userId = (0, getUserId_1.getUserId)(req);
     if (!userId) {
@@ -78,10 +152,10 @@ const getAIMessages = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.getAIMessages = getAIMessages;
+// --- [OPTIMIZED] CHAT FUNCTION ---
 const chatWithAI = (req, res, aiProvider) => __awaiter(void 0, void 0, void 0, function* () {
     const userId = (0, getUserId_1.getUserId)(req);
     let { conversationId, message } = req.body;
-    const systemPrompt = "You are a helpful and friendly assistant for a mentorship platform called MentorMe. Your role is to be an encouraging coach. When a user expresses a desire to set a goal (e.g., 'I want to learn a new skill', 'help me set a goal'), you must guide them by asking questions for each S.M.A.R.T. component (Specific, Measurable, Achievable, Relevant, Time-bound) one by one. Once you have gathered all five components, respond by formatting the goal clearly and instruct the user to add it to their mentorship goals page by linking them to it with this markdown [View Goals](#/goals).";
     if (!userId || !message) {
         res
             .status(400)
@@ -89,6 +163,34 @@ const chatWithAI = (req, res, aiProvider) => __awaiter(void 0, void 0, void 0, f
         return;
     }
     try {
+        // --- [NEW] Selective Context Fetching ---
+        // Define keywords that trigger a context search.
+        const contextKeywords = [
+            "goal",
+            "session",
+            "prepare",
+            "advice",
+            "next step",
+            "remind me",
+            "career",
+        ];
+        const messageIncludesKeyword = contextKeywords.some((keyword) => message.toLowerCase().includes(keyword));
+        let userContext = "";
+        // Only fetch context from the database if a relevant keyword is found.
+        if (messageIncludesKeyword) {
+            console.log("Context keyword detected. Fetching user data...");
+            userContext = yield getUserContext(userId);
+        }
+        // --- End of Optimization ---
+        const systemPrompt = `You are a helpful and friendly assistant for a mentorship platform called MentorMe. Your role is to be an encouraging coach.
+Here is the user's current context. Use it to provide personalized advice and answers. If the context is empty, you can ignore it.
+---
+${userContext}
+---
+When a user asks for help preparing for a session, use the "UPCOMING SESSIONS" context to give specific advice.
+When a user asks what they should work on or for career advice, use the "CURRENT GOALS" context to guide them.
+
+Your original S.M.A.R.T. goal instruction remains: When a user expresses a desire to set a new goal (e.g., 'I want to learn a new skill', 'help me set a goal'), you must guide them by asking questions for each S.M.A.R.T. component (Specific, Measurable, Achievable, Relevant, Time-bound) one by one. Once you have gathered all five components, respond by formatting the goal clearly and instruct the user to add it to their mentorship goals page by linking them to it with this markdown [View Goals](#/goals).`;
         let currentConversationId = conversationId;
         let isNewConversation = false;
         if (!currentConversationId) {
@@ -232,42 +334,31 @@ const deleteAIConversation = (req, res) => __awaiter(void 0, void 0, void 0, fun
         return;
     }
     try {
-        // FIX: Simplified the deletion process to be more resilient.
-        // We first ensure the conversation belongs to the user before attempting deletion.
         const conversation = yield prisma.aIConversation.findFirst({
             where: { id: conversationId, userId: userId },
         });
-        // If the conversation doesn't exist or doesn't belong to the user, throw an error.
         if (!conversation) {
-            res
-                .status(404)
-                .json({
+            res.status(404).json({
                 message: "Conversation not found or you are not authorized to delete it.",
             });
             return;
         }
-        // Now, perform the deletion in a transaction.
-        // This is more robust than the previous check-then-delete pattern inside the transaction.
         yield prisma.$transaction([
-            // Delete all messages associated with the conversation
             prisma.aIMessage.deleteMany({
                 where: { conversationId: conversationId },
             }),
-            // Delete the conversation itself
             prisma.aIConversation.delete({
                 where: { id: conversationId },
             }),
         ]);
-        res.status(204).send(); // No Content, successful deletion
+        res.status(204).send();
     }
     catch (error) {
         console.error("Error deleting conversation:", error);
-        // Handle case where the record to delete is not found (e.g., already deleted)
         if (error.code === "P2025") {
             res.status(404).json({ message: "Conversation not found." });
             return;
         }
-        // Handle other potential errors
         res.status(500).json({
             message: "Server error while deleting conversation.",
             error: error.message,
@@ -275,3 +366,19 @@ const deleteAIConversation = (req, res) => __awaiter(void 0, void 0, void 0, fun
     }
 });
 exports.deleteAIConversation = deleteAIConversation;
+const getAiMentorMatches = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const userId = (0, getUserId_1.getUserId)(req);
+        if (!userId) {
+            res.status(401).json({ message: "User not authenticated." });
+            return;
+        }
+        const topMentors = yield (0, ai_service_1.findTopMentorMatches)(userId);
+        res.status(200).json(topMentors);
+    }
+    catch (error) {
+        console.error("Error getting AI mentor matches:", error);
+        res.status(500).json({ message: "Failed to retrieve mentor matches." });
+    }
+});
+exports.getAiMentorMatches = getAiMentorMatches;

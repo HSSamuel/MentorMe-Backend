@@ -4,7 +4,8 @@ exports.prisma = void 0;
 const client_1 = require("@prisma/client");
 exports.prisma = global.prisma ||
     new client_1.PrismaClient({
-        log: ["query", "info", "warn", "error"], // Optional: Provides more detailed logging for debugging.
+        // The "query" and "info" levels have been removed to clean up the console.
+        log: ["warn", "error"],
     });
 // In a non-production environment, we assign the prisma instance to the global object.
 if (process.env.NODE_ENV !== "production") {

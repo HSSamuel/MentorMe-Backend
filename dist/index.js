@@ -115,12 +115,10 @@ app.use(error_middleware_1.jsonErrorHandler);
 const httpServer = (0, http_1.createServer)(app);
 const io = new socket_io_1.Server(httpServer, {
     cors: {
-        origin: "*", // Keep this permissive for development to ensure no connection issues
+        origin: "*",
         methods: ["GET", "POST"],
     },
 });
-// --- THIS IS THE LINE THAT FIXES THE ERROR ---
-// It makes the 'io' instance globally available to all controllers via the request object.
 app.locals.io = io;
 (0, socket_service_1.initializeSocket)(io);
 // --- Start Server ---

@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getRecommendedMentors = exports.updateMyProfile = exports.getMenteeStats = exports.getMentorStats = exports.getAvailableSkills = exports.getAllMentors = exports.getUserPublicProfile = exports.getMyProfile = void 0;
 const client_1 = require("@prisma/client");
 const getUserId_1 = require("../utils/getUserId");
+const ai_service_1 = require("../services/ai.service");
 const prisma = new client_1.PrismaClient();
 const getMyProfile = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     const userId = (0, getUserId_1.getUserId)(req);
@@ -42,18 +43,16 @@ const getMyProfile = (req, res, next) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.getMyProfile = getMyProfile;
-// [MODIFIED START]: Generalized from getMentorPublicProfile to getUserPublicProfile
-const getUserPublicProfile = (req, res, next // [ADD] Add NextFunction for consistent error handling
-) => __awaiter(void 0, void 0, void 0, function* () {
+const getUserPublicProfile = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
         console.log(`Attempting to fetch public profile for user with ID: ${id}`);
         const userPublicProfile = yield prisma.user.findUnique({
-            where: { id }, // [MODIFIED]: Removed role: "MENTOR" filter
+            where: { id },
             select: {
                 id: true,
-                email: true, // [MODIFIED]: Including email (consider if this should be public)
-                role: true, // [ADD]: Include role so frontend can differentiate (e.g., if mentee/mentor)
+                email: true,
+                role: true,
                 lastSeen: true,
                 profile: {
                     select: {
@@ -62,7 +61,6 @@ const getUserPublicProfile = (req, res, next // [ADD] Add NextFunction for consi
                         skills: true,
                         goals: true,
                         avatarUrl: true,
-                        // Add other public profile fields as needed
                     },
                 },
             },
@@ -77,12 +75,10 @@ const getUserPublicProfile = (req, res, next // [ADD] Add NextFunction for consi
     }
     catch (error) {
         console.error("Error in getUserPublicProfile:", error);
-        next(error); // [ADD] Pass to error middleware
+        next(error);
     }
 });
 exports.getUserPublicProfile = getUserPublicProfile;
-// [MODIFIED END]
-// GET all mentors with pagination
 const getAllMentors = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const page = parseInt(req.query.page) || 1;
@@ -111,7 +107,6 @@ const getAllMentors = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.getAllMentors = getAllMentors;
-// GET available skills
 const getAvailableSkills = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const skills = [
         "Virtual Assistant",
@@ -129,11 +124,35 @@ const getAvailableSkills = (req, res) => __awaiter(void 0, void 0, void 0, funct
         "Internet of Things (IoT)",
         "Cloud Computing",
         "Quantum Computing",
+        "Mobile App Development",
+        "Game Development",
+        "Web Development",
+        "Full Stack Development",
+        "Augmented Reality (AR)",
+        "Virtual Reality (VR)",
+        "Blockchain Development",
+        "Product Management",
+        "Business Analysis",
+        "Technical Writing",
+        "SEO & SEM",
+        "Social Media Management",
+        "Copywriting",
+        "Data Analysis",
+        "UI Engineering",
+        "IT Support & Helpdesk",
+        "Financial Technology (FinTech)",
+        "Computer Vision",
+        "Natural Language Processing (NLP)",
+        "Penetration Testing",
+        "3D Animation & Modelling",
+        "Robotic Process Automation (RPA)",
+        "Low-Code/No-Code Development",
+        "Cloud Security",
+        "CRM Management (e.g., Salesforce, HubSpot)",
     ];
     res.status(200).json(skills);
 });
 exports.getAvailableSkills = getAvailableSkills;
-// GET statistics for a mentor (Optimized Version)
 const getMentorStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
     try {
@@ -150,8 +169,6 @@ const getMentorStats = (req, res) => __awaiter(void 0, void 0, void 0, function*
             prisma.session.count({
                 where: { mentorId: id, date: { lt: new Date() } },
             }),
-            // FIX: The nested 'where' clause for the review aggregation is corrected
-            // to properly filter reviews based on the mentorId from the related mentorship request.
             prisma.review.aggregate({
                 where: {
                     mentorshipRequest: {
@@ -173,13 +190,11 @@ const getMentorStats = (req, res) => __awaiter(void 0, void 0, void 0, function*
         });
     }
     catch (error) {
-        // FIX: Added detailed error logging for easier debugging in the future.
         console.error(`Error fetching mentor stats for mentor ID ${id}:`, error);
         res.status(500).json({ message: "Error fetching mentor stats." });
     }
 });
 exports.getMentorStats = getMentorStats;
-// GET statistics for a mentee
 const getMenteeStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const userId = (0, getUserId_1.getUserId)(req);
     if (!userId) {
@@ -225,6 +240,7 @@ const updateMyProfile = (req, res) => __awaiter(void 0, void 0, void 0, function
         avatarUrl = req.file.path;
     }
     try {
+        // Your existing profile update logic is preserved
         const profile = yield prisma.profile.upsert({
             where: { userId },
             update: Object.assign({ name,
@@ -233,6 +249,23 @@ const updateMyProfile = (req, res) => __awaiter(void 0, void 0, void 0, function
                 name,
                 bio, skills: skills || [], goals }, (avatarUrl && { avatarUrl })),
         });
+        // --- 2. START OF NEW AI EMBEDDING LOGIC ---
+        // Combine the most important profile fields into a single string
+        const profileText = `
+      Skills: ${(skills || []).join(", ")}.
+      Interests and Goals: ${goals}.
+      Bio: ${bio}.
+    `;
+        // Generate the embedding from the text
+        const embedding = yield (0, ai_service_1.generateEmbedding)(profileText);
+        // Save the generated embedding to the User model
+        yield prisma.user.update({
+            where: { id: userId },
+            data: {
+                profileEmbedding: embedding,
+            },
+        });
+        // --- END OF NEW AI EMBEDDING LOGIC ---
         if (avatarUrl) {
             const io = req.app.locals.io;
             io.emit("avatarUpdated", { userId, avatarUrl });

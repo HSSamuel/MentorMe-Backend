@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { PrismaClient } from "@prisma/client";
 import { getUserId } from "../utils/getUserId";
+import { generateEmbedding } from "../services/ai.service";
 
 const prisma = new PrismaClient();
 
@@ -37,21 +38,20 @@ export const getMyProfile = async (
   }
 };
 
-// [MODIFIED START]: Generalized from getMentorPublicProfile to getUserPublicProfile
 export const getUserPublicProfile = async (
   req: Request,
   res: Response,
-  next: NextFunction // [ADD] Add NextFunction for consistent error handling
+  next: NextFunction
 ): Promise<void> => {
   try {
     const { id } = req.params;
     console.log(`Attempting to fetch public profile for user with ID: ${id}`);
     const userPublicProfile = await prisma.user.findUnique({
-      where: { id }, // [MODIFIED]: Removed role: "MENTOR" filter
+      where: { id },
       select: {
         id: true,
-        email: true, // [MODIFIED]: Including email (consider if this should be public)
-        role: true, // [ADD]: Include role so frontend can differentiate (e.g., if mentee/mentor)
+        email: true,
+        role: true,
         lastSeen: true,
         profile: {
           select: {
@@ -60,7 +60,6 @@ export const getUserPublicProfile = async (
             skills: true,
             goals: true,
             avatarUrl: true,
-            // Add other public profile fields as needed
           },
         },
       },
@@ -77,12 +76,10 @@ export const getUserPublicProfile = async (
     res.status(200).json(userPublicProfile);
   } catch (error) {
     console.error("Error in getUserPublicProfile:", error);
-    next(error); // [ADD] Pass to error middleware
+    next(error);
   }
 };
-// [MODIFIED END]
 
-// GET all mentors with pagination
 export const getAllMentors = async (
   req: Request,
   res: Response
@@ -116,7 +113,6 @@ export const getAllMentors = async (
   }
 };
 
-// GET available skills
 export const getAvailableSkills = async (
   req: Request,
   res: Response
@@ -137,11 +133,35 @@ export const getAvailableSkills = async (
     "Internet of Things (IoT)",
     "Cloud Computing",
     "Quantum Computing",
+    "Mobile App Development",
+    "Game Development",
+    "Web Development",
+    "Full Stack Development",
+    "Augmented Reality (AR)",
+    "Virtual Reality (VR)",
+    "Blockchain Development",
+    "Product Management",
+    "Business Analysis",
+    "Technical Writing",
+    "SEO & SEM",
+    "Social Media Management",
+    "Copywriting",
+    "Data Analysis",
+    "UI Engineering",
+    "IT Support & Helpdesk",
+    "Financial Technology (FinTech)",
+    "Computer Vision",
+    "Natural Language Processing (NLP)",
+    "Penetration Testing",
+    "3D Animation & Modelling",
+    "Robotic Process Automation (RPA)",
+    "Low-Code/No-Code Development",
+    "Cloud Security",
+    "CRM Management (e.g., Salesforce, HubSpot)",
   ];
   res.status(200).json(skills);
 };
 
-// GET statistics for a mentor (Optimized Version)
 export const getMentorStats = async (
   req: Request,
   res: Response
@@ -168,8 +188,6 @@ export const getMentorStats = async (
       prisma.session.count({
         where: { mentorId: id, date: { lt: new Date() } },
       }),
-      // FIX: The nested 'where' clause for the review aggregation is corrected
-      // to properly filter reviews based on the mentorId from the related mentorship request.
       prisma.review.aggregate({
         where: {
           mentorshipRequest: {
@@ -192,13 +210,11 @@ export const getMentorStats = async (
       averageRating,
     });
   } catch (error) {
-    // FIX: Added detailed error logging for easier debugging in the future.
     console.error(`Error fetching mentor stats for mentor ID ${id}:`, error);
     res.status(500).json({ message: "Error fetching mentor stats." });
   }
 };
 
-// GET statistics for a mentee
 export const getMenteeStats = async (
   req: Request,
   res: Response
@@ -254,6 +270,7 @@ export const updateMyProfile = async (
   }
 
   try {
+    // Your existing profile update logic is preserved
     const profile = await prisma.profile.upsert({
       where: { userId },
       update: {
@@ -272,6 +289,26 @@ export const updateMyProfile = async (
         ...(avatarUrl && { avatarUrl }),
       },
     });
+
+    // --- 2. START OF NEW AI EMBEDDING LOGIC ---
+    // Combine the most important profile fields into a single string
+    const profileText = `
+      Skills: ${(skills || []).join(", ")}.
+      Interests and Goals: ${goals}.
+      Bio: ${bio}.
+    `;
+
+    // Generate the embedding from the text
+    const embedding = await generateEmbedding(profileText);
+
+    // Save the generated embedding to the User model
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        profileEmbedding: embedding,
+      },
+    });
+    // --- END OF NEW AI EMBEDDING LOGIC ---
 
     if (avatarUrl) {
       const io = req.app.locals.io;

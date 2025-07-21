@@ -1,8 +1,9 @@
 import { Request, Response } from "express";
 import { GoogleGenerativeAI, Part } from "@google/generative-ai";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { CohereClient, Cohere } from "cohere-ai";
 import { getUserId } from "../utils/getUserId";
+import { findTopMentorMatches } from "../services/ai.service";
 import axios from "axios";
 
 // --- Initialization ---
@@ -16,7 +17,88 @@ const cohere = new CohereClient({
   token: process.env.COHERE_API_KEY as string,
 });
 
-// --- Route Handlers (getAIConversations, getAIMessages, etc. remain unchanged) ---
+// --- HELPER FUNCTION TO GET USER CONTEXT ---
+const getUserContext = async (userId: string): Promise<string> => {
+  try {
+    const [mentorships, sessions] = await prisma.$transaction([
+      prisma.mentorshipRequest.findMany({
+        where: {
+          OR: [{ menteeId: userId }, { mentorId: userId }],
+          status: "ACCEPTED",
+        },
+        include: {
+          goals: {
+            where: {
+              status: { not: "COMPLETED" },
+            },
+            select: {
+              title: true,
+              description: true,
+              dueDate: true,
+            },
+          },
+        },
+      }),
+      prisma.session.findMany({
+        where: {
+          OR: [{ menteeId: userId }, { mentorId: userId }],
+          date: { gte: new Date() },
+        },
+        include: {
+          mentor: {
+            include: {
+              profile: {
+                select: { name: true },
+              },
+            },
+          },
+          mentee: {
+            include: {
+              profile: {
+                select: { name: true },
+              },
+            },
+          },
+        },
+        orderBy: { date: "asc" },
+        take: 3,
+      }),
+    ]);
+
+    const allGoals = mentorships.flatMap((m) => m.goals);
+
+    let context = "";
+    if (allGoals.length > 0) {
+      const goalStrings = allGoals.map(
+        (g) =>
+          `- ${g.title} (Due: ${
+            g.dueDate?.toLocaleDateString() || "N/A"
+          }): ${g.description}`
+      );
+      context += "CURRENT GOALS:\n" + goalStrings.join("\n") + "\n\n";
+    }
+
+    if (sessions.length > 0) {
+      const sessionStrings = sessions.map((s) => {
+        const otherPersonName =
+          s.mentor.id === userId
+            ? s.mentee.profile?.name
+            : s.mentor.profile?.name;
+        return `- Session with ${
+          otherPersonName || "your counterpart"
+        } on ${s.date.toLocaleString()}`;
+      });
+      context += "UPCOMING SESSIONS:\n" + sessionStrings.join("\n") + "\n\n";
+    }
+
+    return context;
+  } catch (error) {
+    console.error(`Failed to fetch context for user ${userId}:`, error);
+    return "";
+  }
+};
+
+// --- EXISTING ROUTE HANDLERS ---
 
 export const getAIConversations = async (
   req: Request,
@@ -80,6 +162,7 @@ export const getAIMessages = async (
   }
 };
 
+// --- [OPTIMIZED] CHAT FUNCTION ---
 const chatWithAI = async (
   req: Request,
   res: Response,
@@ -87,9 +170,6 @@ const chatWithAI = async (
 ): Promise<void> => {
   const userId = getUserId(req);
   let { conversationId, message } = req.body;
-
-  const systemPrompt =
-    "You are a helpful and friendly assistant for a mentorship platform called MentorMe. Your role is to be an encouraging coach. When a user expresses a desire to set a goal (e.g., 'I want to learn a new skill', 'help me set a goal'), you must guide them by asking questions for each S.M.A.R.T. component (Specific, Measurable, Achievable, Relevant, Time-bound) one by one. Once you have gathered all five components, respond by formatting the goal clearly and instruct the user to add it to their mentorship goals page by linking them to it with this markdown [View Goals](#/goals).";
 
   if (!userId || !message) {
     res
@@ -99,6 +179,39 @@ const chatWithAI = async (
   }
 
   try {
+    // --- [NEW] Selective Context Fetching ---
+    // Define keywords that trigger a context search.
+    const contextKeywords = [
+      "goal",
+      "session",
+      "prepare",
+      "advice",
+      "next step",
+      "remind me",
+      "career",
+    ];
+    const messageIncludesKeyword = contextKeywords.some((keyword) =>
+      message.toLowerCase().includes(keyword)
+    );
+
+    let userContext = "";
+    // Only fetch context from the database if a relevant keyword is found.
+    if (messageIncludesKeyword) {
+      console.log("Context keyword detected. Fetching user data...");
+      userContext = await getUserContext(userId);
+    }
+    // --- End of Optimization ---
+
+    const systemPrompt = `You are a helpful and friendly assistant for a mentorship platform called MentorMe. Your role is to be an encouraging coach.
+Here is the user's current context. Use it to provide personalized advice and answers. If the context is empty, you can ignore it.
+---
+${userContext}
+---
+When a user asks for help preparing for a session, use the "UPCOMING SESSIONS" context to give specific advice.
+When a user asks what they should work on or for career advice, use the "CURRENT GOALS" context to guide them.
+
+Your original S.M.A.R.T. goal instruction remains: When a user expresses a desire to set a new goal (e.g., 'I want to learn a new skill', 'help me set a goal'), you must guide them by asking questions for each S.M.A.R.T. component (Specific, Measurable, Achievable, Relevant, Time-bound) one by one. Once you have gathered all five components, respond by formatting the goal clearly and instruct the user to add it to their mentorship goals page by linking them to it with this markdown [View Goals](#/goals).`;
+
     let currentConversationId = conversationId;
     let isNewConversation = false;
 
@@ -269,50 +382,60 @@ export const deleteAIConversation = async (
   }
 
   try {
-    // FIX: Simplified the deletion process to be more resilient.
-    // We first ensure the conversation belongs to the user before attempting deletion.
     const conversation = await prisma.aIConversation.findFirst({
       where: { id: conversationId, userId: userId },
     });
 
-    // If the conversation doesn't exist or doesn't belong to the user, throw an error.
     if (!conversation) {
-      res
-        .status(404)
-        .json({
-          message:
-            "Conversation not found or you are not authorized to delete it.",
-        });
+      res.status(404).json({
+        message:
+          "Conversation not found or you are not authorized to delete it.",
+      });
       return;
     }
 
-    // Now, perform the deletion in a transaction.
-    // This is more robust than the previous check-then-delete pattern inside the transaction.
     await prisma.$transaction([
-      // Delete all messages associated with the conversation
       prisma.aIMessage.deleteMany({
         where: { conversationId: conversationId },
       }),
-      // Delete the conversation itself
       prisma.aIConversation.delete({
         where: { id: conversationId },
       }),
     ]);
 
-    res.status(204).send(); // No Content, successful deletion
+    res.status(204).send();
   } catch (error: any) {
     console.error("Error deleting conversation:", error);
 
-    // Handle case where the record to delete is not found (e.g., already deleted)
     if (error.code === "P2025") {
       res.status(404).json({ message: "Conversation not found." });
       return;
     }
 
-    // Handle other potential errors
     res.status(500).json({
       message: "Server error while deleting conversation.",
       error: error.message,
     });
+  }
+};
+
+export const getAiMentorMatches = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = getUserId(req);
+
+    if (!userId) {
+      res.status(401).json({ message: "User not authenticated." });
+      return;
+    }
+
+    const topMentors = await findTopMentorMatches(userId);
+
+    res.status(200).json(topMentors);
+  } catch (error) {
+    console.error("Error getting AI mentor matches:", error);
+    res.status(500).json({ message: "Failed to retrieve mentor matches." });
   }
 };

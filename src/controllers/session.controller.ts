@@ -5,15 +5,32 @@ import { getUserId } from "../utils/getUserId";
 import { awardPoints } from "../services/gamification.service";
 import jwt from "jsonwebtoken";
 
+// --- AI Client Imports and Initialization ---
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { CohereClient } from "cohere-ai";
+
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
+
+// Initialize AI clients only if the keys exist
+let genAI: GoogleGenerativeAI | null = null;
+if (process.env.GEMINI_API_KEY) {
+  genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+}
+
+let cohere: CohereClient | null = null;
+if (process.env.COHERE_API_KEY) {
+  cohere = new CohereClient({
+    token: process.env.COHERE_API_KEY,
+  });
+}
+// --- End of AI Initialization ---
 
 const getUserRole = (req: Request): string | null => {
   if (!req.user) return null;
   return (req.user as any).role as string;
 };
 
-// NEW: Get the logged-in mentor's own availability
 export const getAvailability = async (
   req: Request,
   res: Response
@@ -34,7 +51,6 @@ export const getAvailability = async (
   }
 };
 
-// NEW: Get a specific mentor's availability and generate slots for the next 4 weeks
 export const getMentorAvailability = async (
   req: Request,
   res: Response
@@ -70,7 +86,6 @@ export const getMentorAvailability = async (
     const today = new Date();
 
     for (let i = 0; i < 28; i++) {
-      // Generate slots for the next 4 weeks
       const currentDate = new Date(today);
       currentDate.setDate(today.getDate() + i);
       const dayOfWeek = currentDate.getDay();
@@ -98,7 +113,6 @@ export const getMentorAvailability = async (
                 time: slotTime.toISOString(),
               });
             }
-            // Assuming 1-hour slots, adjust if necessary
             currentHour += 1;
           }
         }
@@ -287,7 +301,6 @@ export const submitFeedback = async (
       data: dataToUpdate,
     });
 
-    // Award points for submitting feedback
     await awardPoints(userId, 15);
 
     res.status(200).json(updatedSession);
@@ -334,7 +347,6 @@ export const generateVideoCallToken = async (
   }
 };
 
-// --- THIS IS THE NEW FUNCTION THAT WAS ADDED ---
 export const notifyMentorOfCall = async (
   req: Request,
   res: Response
@@ -383,5 +395,141 @@ export const notifyMentorOfCall = async (
   } catch (error) {
     console.error("Error sending call notification:", error);
     res.status(500).json({ message: "Failed to send notification." });
+  }
+};
+
+export const createSessionInsights = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  if (!genAI || !cohere) {
+    res.status(500).json({ message: "AI services are not configured." });
+    return;
+  }
+
+  const userId = getUserId(req);
+  const { sessionId } = req.params;
+  const { transcript } = req.body;
+
+  if (!userId) {
+    res.status(401).json({ message: "Authentication required." });
+    return;
+  }
+  if (!transcript || typeof transcript !== "string" || transcript.length < 50) {
+    res.status(400).json({ message: "A substantial transcript is required." });
+    return;
+  }
+
+  try {
+    const session = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        OR: [{ menteeId: userId }, { mentorId: userId }],
+      },
+    });
+
+    if (!session) {
+      res
+        .status(403)
+        .json({ message: "You are not a participant of this session." });
+      return;
+    }
+
+    const summaryPrompt = `Based on the following transcript from a mentorship session, please provide a concise, neutral, one-paragraph summary of the key topics discussed.
+---
+TRANSCRIPT:
+${transcript}
+---
+SUMMARY:`;
+
+    const actionItemsPrompt = `Analyze the following transcript and extract a list of clear, actionable tasks or goals that were agreed upon. If no action items are found, respond with "None".
+Format the response as a numbered list. For example:
+1. Research topic X.
+2. Prepare a draft of Y.
+3. Schedule the next meeting.
+---
+TRANSCRIPT:
+${transcript}
+---
+ACTION ITEMS:`;
+
+    const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const [summaryResponse, actionItemsResponse] = await Promise.all([
+      geminiModel.generateContent(summaryPrompt),
+      cohere.chat({
+        message: actionItemsPrompt,
+      }),
+    ]);
+
+    const summary = summaryResponse.response.text();
+    const actionItemsText = actionItemsResponse.text;
+
+    const actionItems =
+      actionItemsText.toLowerCase().trim() === "none"
+        ? []
+        : actionItemsText
+            .split(/\d+\.\s+/)
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0);
+
+    const savedInsight = await prisma.sessionInsight.upsert({
+      where: { sessionId },
+      update: { summary, actionItems },
+      create: { sessionId, summary, actionItems },
+    });
+
+    res.status(201).json(savedInsight);
+  } catch (error) {
+    console.error("Error creating session insights:", error);
+    res.status(500).json({ message: "Failed to generate session insights." });
+  }
+};
+
+// --- [NEW] FUNCTION TO GET SESSION INSIGHTS ---
+export const getSessionInsights = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const userId = getUserId(req);
+  const { sessionId } = req.params;
+
+  if (!userId) {
+    res.status(401).json({ message: "Authentication required." });
+    return;
+  }
+
+  try {
+    // 1. Verify user is part of the session
+    const session = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        OR: [{ menteeId: userId }, { mentorId: userId }],
+      },
+    });
+
+    if (!session) {
+      res
+        .status(403)
+        .json({ message: "You are not authorized to view these insights." });
+      return;
+    }
+
+    // 2. Fetch the insights for the session
+    const insights = await prisma.sessionInsight.findUnique({
+      where: { sessionId },
+    });
+
+    if (!insights) {
+      res.status(404).json({
+        message: "No insights have been generated for this session yet.",
+      });
+      return;
+    }
+
+    res.status(200).json(insights);
+  } catch (error) {
+    console.error("Error fetching session insights:", error);
+    res.status(500).json({ message: "Failed to fetch session insights." });
   }
 };

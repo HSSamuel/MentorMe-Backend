@@ -126,13 +126,11 @@ const httpServer = createServer(app);
 
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: "*", // Keep this permissive for development to ensure no connection issues
+    origin: "*",
     methods: ["GET", "POST"],
   },
 });
 
-// --- THIS IS THE LINE THAT FIXES THE ERROR ---
-// It makes the 'io' instance globally available to all controllers via the request object.
 app.locals.io = io;
 
 initializeSocket(io);

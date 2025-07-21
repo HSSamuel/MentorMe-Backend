@@ -37,4 +37,16 @@ router.post("/:sessionId/call-token", auth_middleware_1.authMiddleware, [(0, exp
 // Mentee calls this endpoint to notify the mentor they are in the video call
 router.post("/:sessionId/notify-call", auth_middleware_1.authMiddleware, auth_middleware_1.menteeMiddleware, // Ensures only the mentee can trigger this
 [(0, express_validator_1.param)("sessionId").isMongoId().withMessage("Invalid session ID")], validateRequest_1.validateRequest, session_controller_1.notifyMentorOfCall);
+// --- ROUTES FOR SESSION INSIGHTS ---
+// POST: Any authenticated user (mentor or mentee) can create insights after a call
+router.post("/:sessionId/insights", auth_middleware_1.authMiddleware, [
+    (0, express_validator_1.param)("sessionId").isMongoId().withMessage("Invalid session ID"),
+    (0, express_validator_1.body)("transcript")
+        .isString()
+        .withMessage("Transcript must be a string.")
+        .isLength({ min: 50 })
+        .withMessage("Transcript must be at least 50 characters long."),
+], validateRequest_1.validateRequest, session_controller_1.createSessionInsights);
+// GET: Any authenticated participant can retrieve the insights for a session
+router.get("/:sessionId/insights", auth_middleware_1.authMiddleware, [(0, express_validator_1.param)("sessionId").isMongoId().withMessage("Invalid session ID")], validateRequest_1.validateRequest, session_controller_1.getSessionInsights);
 exports.default = router;

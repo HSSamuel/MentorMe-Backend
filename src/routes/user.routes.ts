@@ -9,7 +9,10 @@ import {
   getRecommendedMentors,
   getMyProfile,
 } from "../controllers/user.controller";
-import { authMiddleware } from "../middleware/auth.middleware";
+import {
+  authMiddleware,
+  mentorMiddleware,
+} from "../middleware/auth.middleware";
 import { body, param } from "express-validator";
 import { validateRequest } from "../middleware/validateRequest";
 import { upload } from "../middleware/fileUpload.middleware";
@@ -32,14 +35,24 @@ router.put(
 );
 
 router.get("/me/profile", authMiddleware, getMyProfile);
-router.get("/mentor/:id/stats", authMiddleware, getMentorStats);
+
+// --- [NEW] ROUTES FOR DASHBOARD STATISTICS ---
+router.get(
+  "/mentor/:id/stats",
+  authMiddleware,
+  [param("id").isMongoId().withMessage("Invalid mentor ID")],
+  validateRequest,
+  getMentorStats
+);
+
 router.get("/mentee/stats", authMiddleware, getMenteeStats);
+// --- END OF NEW ROUTES ---
+
 router.get("/mentors", authMiddleware, getAllMentors);
 router.get("/skills", authMiddleware, getAvailableSkills);
 router.get("/mentors/recommended", authMiddleware, getRecommendedMentors);
 
 // [FIX]: The generic '/:id' route is moved to the end.
-// This ensures that specific routes like '/mentors' and '/skills' are matched first.
 router.get(
   "/:id",
   [param("id").isMongoId().withMessage("Invalid user ID")],

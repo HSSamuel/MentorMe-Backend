@@ -7,15 +7,22 @@ import {
   handleCohereChat,
   handleFileAnalysis,
   deleteAIConversation,
+  getAiMentorMatches, // Added this import
 } from "../controllers/ai.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 import { validateRequest } from "../middleware/validateRequest";
-// FIX: Import the new memory uploader
 import { memoryUpload } from "../middleware/fileUpload.middleware";
 
 const router = Router();
 
+// This middleware will protect all routes defined below it
 router.use(authMiddleware);
+
+// --- NEW ROUTE FOR MENTOR MATCHING ---
+// When a GET request is made to /api/ai/matches, it will be handled by getAiMentorMatches
+router.get("/matches", getAiMentorMatches);
+
+// --- Existing Chat Routes ---
 
 router.get("/conversations", getAIConversations);
 
@@ -29,7 +36,6 @@ router.get(
 router.post("/chat", handleAIChat);
 router.post("/chat/cohere", handleCohereChat);
 
-// FIX: Use the memoryUpload middleware for this route
 router.post("/analyze-file", memoryUpload.single("file"), handleFileAnalysis);
 
 router.delete(
