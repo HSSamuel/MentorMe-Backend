@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteAllNotifications = exports.deleteNotification = exports.markAllAsRead = exports.markAsRead = exports.getNotifications = void 0;
 const client_1 = require("@prisma/client");
@@ -18,7 +9,7 @@ const getUserId = (req) => {
     return req.user.userId;
 };
 // GET /notifications
-const getNotifications = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getNotifications = async (req, res) => {
     const userId = getUserId(req);
     if (!userId) {
         // Corrected: Removed 'return' and added an explicit 'return' to exit
@@ -26,7 +17,7 @@ const getNotifications = (req, res) => __awaiter(void 0, void 0, void 0, functio
         return;
     }
     try {
-        const notifications = yield prisma.notification.findMany({
+        const notifications = await prisma.notification.findMany({
             where: { userId },
             orderBy: { createdAt: "desc" },
         });
@@ -35,10 +26,10 @@ const getNotifications = (req, res) => __awaiter(void 0, void 0, void 0, functio
     catch (error) {
         res.status(500).json({ message: "Server error fetching notifications." });
     }
-});
+};
 exports.getNotifications = getNotifications;
 // PUT /notifications/:id/read
-const markAsRead = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const markAsRead = async (req, res) => {
     const userId = getUserId(req);
     const { id } = req.params;
     if (!userId) {
@@ -47,7 +38,7 @@ const markAsRead = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         return;
     }
     try {
-        yield prisma.notification.updateMany({
+        await prisma.notification.updateMany({
             where: { id, userId }, // Ensure user can only update their own notifications
             data: { isRead: true },
         });
@@ -58,10 +49,10 @@ const markAsRead = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             .status(500)
             .json({ message: "Server error marking notification as read." });
     }
-});
+};
 exports.markAsRead = markAsRead;
 // PUT /notifications/read-all
-const markAllAsRead = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const markAllAsRead = async (req, res) => {
     const userId = getUserId(req);
     if (!userId) {
         // Corrected: Removed 'return' and added an explicit 'return' to exit
@@ -69,7 +60,7 @@ const markAllAsRead = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         return;
     }
     try {
-        yield prisma.notification.updateMany({
+        await prisma.notification.updateMany({
             where: { userId, isRead: false },
             data: { isRead: true },
         });
@@ -80,9 +71,9 @@ const markAllAsRead = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             .status(500)
             .json({ message: "Server error marking all notifications as read." });
     }
-});
+};
 exports.markAllAsRead = markAllAsRead;
-const deleteNotification = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const deleteNotification = async (req, res) => {
     const userId = getUserId(req);
     const { notificationId } = req.params;
     if (!userId) {
@@ -90,7 +81,7 @@ const deleteNotification = (req, res) => __awaiter(void 0, void 0, void 0, funct
         return;
     }
     try {
-        const notification = yield prisma.notification.findUnique({
+        const notification = await prisma.notification.findUnique({
             where: { id: notificationId },
         });
         if (!notification || notification.userId !== userId) {
@@ -101,16 +92,16 @@ const deleteNotification = (req, res) => __awaiter(void 0, void 0, void 0, funct
             });
             return;
         }
-        yield prisma.notification.delete({ where: { id: notificationId } });
+        await prisma.notification.delete({ where: { id: notificationId } });
         res.status(200).json({ message: "Notification deleted successfully." });
     }
     catch (error) {
         res.status(500).json({ message: "Error deleting notification." });
     }
-});
+};
 exports.deleteNotification = deleteNotification;
 // --- THIS IS THE CORRECTED FUNCTION ---
-const deleteAllNotifications = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const deleteAllNotifications = async (req, res) => {
     const userId = getUserId(req);
     // This check ensures that the function stops if the user is not authenticated.
     if (!userId) {
@@ -119,7 +110,7 @@ const deleteAllNotifications = (req, res) => __awaiter(void 0, void 0, void 0, f
     }
     try {
         // The TypeScript compiler now knows for certain that 'userId' is a string here.
-        yield prisma.notification.deleteMany({
+        await prisma.notification.deleteMany({
             where: { userId: userId },
         });
         res.status(200).json({ message: "All notifications deleted successfully." });
@@ -127,5 +118,5 @@ const deleteAllNotifications = (req, res) => __awaiter(void 0, void 0, void 0, f
     catch (error) {
         res.status(500).json({ message: "Error deleting all notifications." });
     }
-});
+};
 exports.deleteAllNotifications = deleteAllNotifications;

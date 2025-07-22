@@ -1,32 +1,12 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __rest = (this && this.__rest) || function (s, e) {
-    var t = {};
-    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
-        t[p] = s[p];
-    if (s != null && typeof Object.getOwnPropertySymbols === "function")
-        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
-            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
-                t[p[i]] = s[p[i]];
-        }
-    return t;
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateUserRole = exports.getStats = exports.assignMentor = exports.getAllSessions = exports.getAllUsers = exports.getAllMatches = void 0;
 const client_1 = require("@prisma/client");
 const prisma = new client_1.PrismaClient();
 // Ensure this function is exported
-const getAllMatches = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getAllMatches = async (req, res) => {
     try {
-        const matches = yield prisma.mentorshipRequest.findMany({
+        const matches = await prisma.mentorshipRequest.findMany({
             include: {
                 mentor: {
                     select: {
@@ -51,19 +31,19 @@ const getAllMatches = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         console.error("Error fetching matches:", error);
         res.status(500).json({ message: "Error fetching matches." });
     }
-});
+};
 exports.getAllMatches = getAllMatches;
-const getAllUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getAllUsers = async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20; // Default to 20 per page
         const skip = (page - 1) * limit;
-        const users = yield prisma.user.findMany({
+        const users = await prisma.user.findMany({
             skip: skip,
             take: limit,
             include: { profile: true },
         });
-        const totalUsers = yield prisma.user.count();
+        const totalUsers = await prisma.user.count();
         res.status(200).json({
             users,
             totalPages: Math.ceil(totalUsers / limit),
@@ -73,35 +53,35 @@ const getAllUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     catch (error) {
         res.status(500).json({ message: "Error fetching users." });
     }
-});
+};
 exports.getAllUsers = getAllUsers;
 // GET /admin/sessions
-const getAllSessions = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getAllSessions = async (req, res) => {
     try {
-        const sessions = yield prisma.session.findMany({
+        const sessions = await prisma.session.findMany({
             include: {
                 mentor: { select: { profile: true } },
                 mentee: { select: { profile: true } },
             },
             orderBy: { date: "desc" },
         });
-        const totalCount = yield prisma.session.count();
+        const totalCount = await prisma.session.count();
         res.status(200).json({ totalCount, sessions });
     }
     catch (error) {
         res.status(500).json({ message: "Error fetching sessions." });
     }
-});
+};
 exports.getAllSessions = getAllSessions;
 // POST /admin/assign
-const assignMentor = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const assignMentor = async (req, res) => {
     const { menteeId, mentorId } = req.body;
     if (!menteeId || !mentorId) {
         res.status(400).json({ message: "Mentee ID and Mentor ID are required" });
         return;
     }
     try {
-        const newRequest = yield prisma.mentorshipRequest.create({
+        const newRequest = await prisma.mentorshipRequest.create({
             data: {
                 menteeId,
                 mentorId,
@@ -113,19 +93,19 @@ const assignMentor = (req, res) => __awaiter(void 0, void 0, void 0, function* (
     catch (error) {
         res.status(500).json({ message: "Server error while creating request" });
     }
-});
+};
 exports.assignMentor = assignMentor;
 // GET /admin/stats
-const getStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getStats = async (req, res) => {
     try {
-        const totalUsers = yield prisma.user.count();
-        const totalMentors = yield prisma.user.count({ where: { role: "MENTOR" } });
-        const totalMentees = yield prisma.user.count({ where: { role: "MENTEE" } });
-        const totalMatches = yield prisma.mentorshipRequest.count({
+        const totalUsers = await prisma.user.count();
+        const totalMentors = await prisma.user.count({ where: { role: "MENTOR" } });
+        const totalMentees = await prisma.user.count({ where: { role: "MENTEE" } });
+        const totalMatches = await prisma.mentorshipRequest.count({
             where: { status: "ACCEPTED" },
         });
-        const totalSessions = yield prisma.session.count();
-        const pendingRequests = yield prisma.mentorshipRequest.count({
+        const totalSessions = await prisma.session.count();
+        const pendingRequests = await prisma.mentorshipRequest.count({
             where: { status: "PENDING" },
         });
         res.status(200).json({
@@ -140,21 +120,21 @@ const getStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     catch (error) {
         res.status(500).json({ message: "Error fetching admin stats." });
     }
-});
+};
 exports.getStats = getStats;
-const updateUserRole = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const updateUserRole = async (req, res) => {
     const { id } = req.params;
     const { role } = req.body;
     try {
-        const updatedUser = yield prisma.user.update({
+        const updatedUser = await prisma.user.update({
             where: { id },
             data: { role: role },
         });
-        const { password } = updatedUser, userWithoutPassword = __rest(updatedUser, ["password"]);
+        const { password, ...userWithoutPassword } = updatedUser;
         res.status(200).json(userWithoutPassword);
     }
     catch (error) {
         res.status(500).json({ message: "Error updating user role." });
     }
-});
+};
 exports.updateUserRole = updateUserRole;

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { param } from "express-validator";
+import { param, body } from "express-validator";
 import {
   getAIConversations,
   getAIMessages,
@@ -7,7 +7,8 @@ import {
   handleCohereChat,
   handleFileAnalysis,
   deleteAIConversation,
-  getAiMentorMatches, // Added this import
+  getAiMentorMatches,
+  summarizeTranscript,
 } from "../controllers/ai.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 import { validateRequest } from "../middleware/validateRequest";
@@ -15,14 +16,28 @@ import { memoryUpload } from "../middleware/fileUpload.middleware";
 
 const router = Router();
 
-// This middleware will protect all routes defined below it
+// Middleware to protect all routes defined below it
 router.use(authMiddleware);
 
-// --- NEW ROUTE FOR MENTOR MATCHING ---
-// When a GET request is made to /api/ai/matches, it will be handled by getAiMentorMatches
+// --- ROUTE FOR MENTOR MATCHING ---
 router.get("/matches", getAiMentorMatches);
 
-// --- Existing Chat Routes ---
+// --- Route for summarizing session transcripts ---
+router.post(
+  "/summarize",
+  [
+    body("sessionId")
+      .isMongoId()
+      .withMessage("A valid session ID is required."),
+    body("transcript")
+      .notEmpty()
+      .withMessage("Transcript content cannot be empty."),
+  ],
+  validateRequest,
+  summarizeTranscript
+);
+
+// --- Chat Routes ---
 
 router.get("/conversations", getAIConversations);
 

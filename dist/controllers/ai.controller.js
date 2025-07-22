@@ -1,15 +1,6 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAiMentorMatches = exports.deleteAIConversation = exports.handleFileAnalysis = exports.handleCohereChat = exports.handleAIChat = exports.getAIMessages = exports.getAIConversations = void 0;
+exports.summarizeTranscript = exports.getAiMentorMatches = exports.deleteAIConversation = exports.handleFileAnalysis = exports.handleCohereChat = exports.handleAIChat = exports.getAIMessages = exports.getAIConversations = void 0;
 const generative_ai_1 = require("@google/generative-ai");
 const client_1 = require("@prisma/client");
 const cohere_ai_1 = require("cohere-ai");
@@ -26,9 +17,9 @@ const cohere = new cohere_ai_1.CohereClient({
     token: process.env.COHERE_API_KEY,
 });
 // --- HELPER FUNCTION TO GET USER CONTEXT ---
-const getUserContext = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+const getUserContext = async (userId) => {
     try {
-        const [mentorships, sessions] = yield prisma.$transaction([
+        const [mentorships, sessions] = await prisma.$transaction([
             prisma.mentorshipRequest.findMany({
                 where: {
                     OR: [{ menteeId: userId }, { mentorId: userId }],
@@ -75,18 +66,14 @@ const getUserContext = (userId) => __awaiter(void 0, void 0, void 0, function* (
         const allGoals = mentorships.flatMap((m) => m.goals);
         let context = "";
         if (allGoals.length > 0) {
-            const goalStrings = allGoals.map((g) => {
-                var _a;
-                return `- ${g.title} (Due: ${((_a = g.dueDate) === null || _a === void 0 ? void 0 : _a.toLocaleDateString()) || "N/A"}): ${g.description}`;
-            });
+            const goalStrings = allGoals.map((g) => `- ${g.title} (Due: ${g.dueDate?.toLocaleDateString() || "N/A"}): ${g.description}`);
             context += "CURRENT GOALS:\n" + goalStrings.join("\n") + "\n\n";
         }
         if (sessions.length > 0) {
             const sessionStrings = sessions.map((s) => {
-                var _a, _b;
                 const otherPersonName = s.mentor.id === userId
-                    ? (_a = s.mentee.profile) === null || _a === void 0 ? void 0 : _a.name
-                    : (_b = s.mentor.profile) === null || _b === void 0 ? void 0 : _b.name;
+                    ? s.mentee.profile?.name
+                    : s.mentor.profile?.name;
                 return `- Session with ${otherPersonName || "your counterpart"} on ${s.date.toLocaleString()}`;
             });
             context += "UPCOMING SESSIONS:\n" + sessionStrings.join("\n") + "\n\n";
@@ -97,9 +84,9 @@ const getUserContext = (userId) => __awaiter(void 0, void 0, void 0, function* (
         console.error(`Failed to fetch context for user ${userId}:`, error);
         return "";
     }
-});
+};
 // --- EXISTING ROUTE HANDLERS ---
-const getAIConversations = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getAIConversations = async (req, res) => {
     const userId = (0, getUserId_1.getUserId)(req);
     if (!userId) {
         res.status(401).json({
@@ -108,7 +95,7 @@ const getAIConversations = (req, res) => __awaiter(void 0, void 0, void 0, funct
         return;
     }
     try {
-        const conversations = yield prisma.aIConversation.findMany({
+        const conversations = await prisma.aIConversation.findMany({
             where: { userId },
             orderBy: { updatedAt: "desc" },
             include: { _count: { select: { messages: true } } },
@@ -121,9 +108,9 @@ const getAIConversations = (req, res) => __awaiter(void 0, void 0, void 0, funct
             .status(500)
             .json({ message: "Server error while fetching conversations." });
     }
-});
+};
 exports.getAIConversations = getAIConversations;
-const getAIMessages = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getAIMessages = async (req, res) => {
     const userId = (0, getUserId_1.getUserId)(req);
     const { conversationId } = req.params;
     if (!userId) {
@@ -137,7 +124,7 @@ const getAIMessages = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         return;
     }
     try {
-        const messages = yield prisma.aIMessage.findMany({
+        const messages = await prisma.aIMessage.findMany({
             where: {
                 conversationId: conversationId,
                 conversation: { userId },
@@ -150,10 +137,9 @@ const getAIMessages = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         console.error(`Error in getAIMessages for conversation ${conversationId}:`, error);
         res.status(500).json({ message: "Server error while fetching messages." });
     }
-});
+};
 exports.getAIMessages = getAIMessages;
-// --- [OPTIMIZED] CHAT FUNCTION ---
-const chatWithAI = (req, res, aiProvider) => __awaiter(void 0, void 0, void 0, function* () {
+const chatWithAI = async (req, res, aiProvider) => {
     const userId = (0, getUserId_1.getUserId)(req);
     let { conversationId, message } = req.body;
     if (!userId || !message) {
@@ -163,8 +149,6 @@ const chatWithAI = (req, res, aiProvider) => __awaiter(void 0, void 0, void 0, f
         return;
     }
     try {
-        // --- [NEW] Selective Context Fetching ---
-        // Define keywords that trigger a context search.
         const contextKeywords = [
             "goal",
             "session",
@@ -176,12 +160,10 @@ const chatWithAI = (req, res, aiProvider) => __awaiter(void 0, void 0, void 0, f
         ];
         const messageIncludesKeyword = contextKeywords.some((keyword) => message.toLowerCase().includes(keyword));
         let userContext = "";
-        // Only fetch context from the database if a relevant keyword is found.
         if (messageIncludesKeyword) {
             console.log("Context keyword detected. Fetching user data...");
-            userContext = yield getUserContext(userId);
+            userContext = await getUserContext(userId);
         }
-        // --- End of Optimization ---
         const systemPrompt = `You are a helpful and friendly assistant for a mentorship platform called MentorMe. Your role is to be an encouraging coach.
 Here is the user's current context. Use it to provide personalized advice and answers. If the context is empty, you can ignore it.
 ---
@@ -195,19 +177,19 @@ Your original S.M.A.R.T. goal instruction remains: When a user expresses a desir
         let isNewConversation = false;
         if (!currentConversationId) {
             isNewConversation = true;
-            const newConversation = yield prisma.aIConversation.create({
+            const newConversation = await prisma.aIConversation.create({
                 data: { userId, title: message.substring(0, 40) },
             });
             currentConversationId = newConversation.id;
         }
-        yield prisma.aIMessage.create({
+        await prisma.aIMessage.create({
             data: {
                 conversationId: currentConversationId,
                 content: message,
                 sender: "USER",
             },
         });
-        const pastMessages = yield prisma.aIMessage.findMany({
+        const pastMessages = await prisma.aIMessage.findMany({
             where: { conversationId: currentConversationId },
             orderBy: { createdAt: "asc" },
         });
@@ -225,7 +207,7 @@ Your original S.M.A.R.T. goal instruction remains: When a user expresses a desir
                 }))
                     .slice(0, -1),
             });
-            const result = yield chat.sendMessage(message);
+            const result = await chat.sendMessage(message);
             aiResponseText = result.response.text();
         }
         else {
@@ -233,14 +215,14 @@ Your original S.M.A.R.T. goal instruction remains: When a user expresses a desir
                 role: msg.sender === "USER" ? "USER" : "CHATBOT",
                 message: msg.content,
             }));
-            const response = yield cohere.chat({
+            const response = await cohere.chat({
                 preamble: systemPrompt,
                 message,
                 chatHistory: chatHistory.slice(0, -1),
             });
             aiResponseText = response.text;
         }
-        const aiMessage = yield prisma.aIMessage.create({
+        const aiMessage = await prisma.aIMessage.create({
             data: {
                 conversationId: currentConversationId,
                 content: aiResponseText,
@@ -258,16 +240,16 @@ Your original S.M.A.R.T. goal instruction remains: When a user expresses a desir
             error: error.message || "An unknown error occurred.",
         });
     }
-});
-const handleAIChat = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    yield chatWithAI(req, res, "gemini");
-});
+};
+const handleAIChat = async (req, res) => {
+    await chatWithAI(req, res, "gemini");
+};
 exports.handleAIChat = handleAIChat;
-const handleCohereChat = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    yield chatWithAI(req, res, "cohere");
-});
+const handleCohereChat = async (req, res) => {
+    await chatWithAI(req, res, "cohere");
+};
 exports.handleCohereChat = handleCohereChat;
-const handleFileAnalysis = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const handleFileAnalysis = async (req, res) => {
     const userId = (0, getUserId_1.getUserId)(req);
     let { conversationId, prompt } = req.body;
     if (!userId) {
@@ -281,7 +263,7 @@ const handleFileAnalysis = (req, res) => __awaiter(void 0, void 0, void 0, funct
     try {
         let currentConversationId = conversationId;
         if (!currentConversationId) {
-            const newConversation = yield prisma.aIConversation.create({
+            const newConversation = await prisma.aIConversation.create({
                 data: { userId, title: `File Analysis: ${req.file.originalname}` },
             });
             currentConversationId = newConversation.id;
@@ -304,9 +286,9 @@ const handleFileAnalysis = (req, res) => __awaiter(void 0, void 0, void 0, funct
             req.file.mimetype.includes("presentation")) {
             finalPrompt = prompt || "Summarize the key points of this document.";
         }
-        const result = yield model.generateContent([finalPrompt, filePart]);
+        const result = await model.generateContent([finalPrompt, filePart]);
         const aiResponseText = result.response.text();
-        const aiMessage = yield prisma.aIMessage.create({
+        const aiMessage = await prisma.aIMessage.create({
             data: {
                 conversationId: currentConversationId,
                 content: aiResponseText,
@@ -324,9 +306,9 @@ const handleFileAnalysis = (req, res) => __awaiter(void 0, void 0, void 0, funct
             error: error.message || "An unknown error occurred.",
         });
     }
-});
+};
 exports.handleFileAnalysis = handleFileAnalysis;
-const deleteAIConversation = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const deleteAIConversation = async (req, res) => {
     const userId = (0, getUserId_1.getUserId)(req);
     const { conversationId } = req.params;
     if (!userId) {
@@ -334,7 +316,7 @@ const deleteAIConversation = (req, res) => __awaiter(void 0, void 0, void 0, fun
         return;
     }
     try {
-        const conversation = yield prisma.aIConversation.findFirst({
+        const conversation = await prisma.aIConversation.findFirst({
             where: { id: conversationId, userId: userId },
         });
         if (!conversation) {
@@ -343,7 +325,7 @@ const deleteAIConversation = (req, res) => __awaiter(void 0, void 0, void 0, fun
             });
             return;
         }
-        yield prisma.$transaction([
+        await prisma.$transaction([
             prisma.aIMessage.deleteMany({
                 where: { conversationId: conversationId },
             }),
@@ -364,21 +346,94 @@ const deleteAIConversation = (req, res) => __awaiter(void 0, void 0, void 0, fun
             error: error.message,
         });
     }
-});
+};
 exports.deleteAIConversation = deleteAIConversation;
-const getAiMentorMatches = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getAiMentorMatches = async (req, res) => {
     try {
         const userId = (0, getUserId_1.getUserId)(req);
         if (!userId) {
             res.status(401).json({ message: "User not authenticated." });
             return;
         }
-        const topMentors = yield (0, ai_service_1.findTopMentorMatches)(userId);
+        const topMentors = await (0, ai_service_1.findTopMentorMatches)(userId);
         res.status(200).json(topMentors);
     }
     catch (error) {
         console.error("Error getting AI mentor matches:", error);
         res.status(500).json({ message: "Failed to retrieve mentor matches." });
     }
-});
+};
 exports.getAiMentorMatches = getAiMentorMatches;
+// --- [NEW] Controller to summarize a session transcript ---
+const summarizeTranscript = async (req, res) => {
+    const userId = (0, getUserId_1.getUserId)(req);
+    const { sessionId, transcript } = req.body;
+    if (!userId) {
+        res.status(401).json({ message: "Authentication error." });
+        return;
+    }
+    if (!sessionId || !transcript) {
+        res
+            .status(400)
+            .json({ message: "Session ID and transcript are required." });
+        return;
+    }
+    try {
+        // 1. Verify the user is a participant of the session
+        const session = await prisma.session.findFirst({
+            where: {
+                id: sessionId,
+                OR: [{ menteeId: userId }, { mentorId: userId }],
+            },
+        });
+        if (!session) {
+            res
+                .status(403)
+                .json({ message: "You are not authorized to access this session." });
+            return;
+        }
+        // 2. Prepare the prompt for the AI
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const prompt = `
+      You are an AI assistant for a mentorship platform. Your task is to analyze the following transcript of a mentorship session.
+      Please provide a concise, professional summary of the conversation.
+      After the summary, create a bulleted list of the key action items discussed for the mentee.
+      
+      Transcript:
+      ---
+      ${transcript}
+      ---
+    `;
+        // 3. Call the AI model
+        const result = await model.generateContent(prompt);
+        const aiResponseText = result.response.text();
+        // 4. Extract summary and action items (simple parsing)
+        const summaryMatch = aiResponseText.match(/summary:(.*?)(action items:|$)/is);
+        const actionItemsMatch = aiResponseText.match(/action items:(.*)/is);
+        const summary = summaryMatch
+            ? summaryMatch[1].trim()
+            : "Summary could not be generated.";
+        const actionItems = actionItemsMatch
+            ? actionItemsMatch[1]
+                .trim()
+                .split("\n")
+                .map((item) => item.replace(/^- /, "").trim())
+                .filter(Boolean)
+            : [];
+        // 5. Save the insights to the database
+        const insight = await prisma.sessionInsight.upsert({
+            where: { sessionId },
+            update: { summary, actionItems },
+            create: { sessionId, summary, actionItems },
+        });
+        res.status(200).json(insight);
+    }
+    catch (error) {
+        console.error("Error summarizing transcript:", error);
+        res.status(500).json({
+            message: "Server error while summarizing transcript.",
+            error: error.message || "An unknown error occurred.",
+        });
+    }
+};
+exports.summarizeTranscript = summarizeTranscript;

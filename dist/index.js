@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -19,7 +10,6 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const express_session_1 = __importDefault(require("express-session"));
 const passport_1 = __importDefault(require("passport"));
 const http_1 = require("http");
-const socket_io_1 = require("socket.io");
 const path_1 = __importDefault(require("path"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const connect_mongo_1 = __importDefault(require("connect-mongo"));
@@ -35,9 +25,12 @@ const message_routes_1 = __importDefault(require("./routes/message.routes"));
 const notification_routes_1 = __importDefault(require("./routes/notification.routes"));
 const calendar_routes_1 = __importDefault(require("./routes/calendar.routes"));
 const ai_routes_1 = __importDefault(require("./routes/ai.routes"));
+// --- [NEW] Import the new routes for Stream token generation ---
+const stream_routes_1 = __importDefault(require("./routes/stream.routes"));
 // Configurations and Services
 require("./config/passport");
-const socket_service_1 = require("./services/socket.service");
+// The old socket service is no longer needed for the main chat
+// import { initializeSocket } from "./services/socket.service";
 const error_middleware_1 = require("./middleware/error.middleware");
 require("./jobs/reminder.cron");
 const app = (0, express_1.default)();
@@ -108,23 +101,17 @@ app.use("/api/messages", message_routes_1.default);
 app.use("/api/notifications", notification_routes_1.default);
 app.use("/api/calendar", calendar_routes_1.default);
 app.use("/api/ai", ai_routes_1.default);
+// --- [NEW] This line registers the /api/stream/token endpoint ---
+app.use("/api/stream", stream_routes_1.default);
 app.get("/", (req, res) => {
     res.send("Mentor Backend API is running!");
 });
 app.use(error_middleware_1.jsonErrorHandler);
 const httpServer = (0, http_1.createServer)(app);
-const io = new socket_io_1.Server(httpServer, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"],
-    },
-});
-app.locals.io = io;
-(0, socket_service_1.initializeSocket)(io);
 // --- Start Server ---
-const startServer = () => __awaiter(void 0, void 0, void 0, function* () {
+const startServer = async () => {
     try {
-        yield mongoose_1.default.connect(MONGO_URI);
+        await mongoose_1.default.connect(MONGO_URI);
         console.log("🟢 MongoDB connected successfully");
         httpServer.listen(PORT, () => {
             console.log(`🚀 Server is running on http://localhost:${PORT}`);
@@ -134,5 +121,5 @@ const startServer = () => __awaiter(void 0, void 0, void 0, function* () {
         console.error("🔴 Could not connect to MongoDB:", error);
         process.exit(1);
     }
-});
+};
 startServer();

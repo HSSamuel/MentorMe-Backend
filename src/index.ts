@@ -5,11 +5,9 @@ import mongoose from "mongoose";
 import session from "express-session";
 import passport from "passport";
 import { createServer } from "http";
-import { Server as SocketIOServer } from "socket.io";
 import path from "path";
 import rateLimit from "express-rate-limit";
 import MongoStore from "connect-mongo";
-import { PrismaClient } from "@prisma/client";
 
 // Route handlers
 import authRoutes from "./routes/auth.routes";
@@ -23,10 +21,13 @@ import messageRoutes from "./routes/message.routes";
 import notificationRoutes from "./routes/notification.routes";
 import calendarRoutes from "./routes/calendar.routes";
 import aiRoutes from "./routes/ai.routes";
+// --- [NEW] Import the new routes for Stream token generation ---
+import streamRoutes from "./routes/stream.routes";
 
 // Configurations and Services
 import "./config/passport";
-import { initializeSocket } from "./services/socket.service";
+// The old socket service is no longer needed for the main chat
+// import { initializeSocket } from "./services/socket.service";
 import { jsonErrorHandler } from "./middleware/error.middleware";
 import "./jobs/reminder.cron";
 
@@ -115,6 +116,8 @@ app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/ai", aiRoutes);
+// --- [NEW] This line registers the /api/stream/token endpoint ---
+app.use("/api/stream", streamRoutes);
 
 app.get("/", (req, res) => {
   res.send("Mentor Backend API is running!");
@@ -123,17 +126,6 @@ app.get("/", (req, res) => {
 app.use(jsonErrorHandler);
 
 const httpServer = createServer(app);
-
-const io = new SocketIOServer(httpServer, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-  },
-});
-
-app.locals.io = io;
-
-initializeSocket(io);
 
 // --- Start Server ---
 const startServer = async () => {

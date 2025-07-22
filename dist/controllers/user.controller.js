@@ -1,27 +1,18 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getRecommendedMentors = exports.updateMyProfile = exports.getMenteeStats = exports.getMentorStats = exports.getAvailableSkills = exports.getAllMentors = exports.getUserPublicProfile = exports.getMyProfile = void 0;
 const client_1 = require("@prisma/client");
 const getUserId_1 = require("../utils/getUserId");
 const ai_service_1 = require("../services/ai.service");
 const prisma = new client_1.PrismaClient();
-const getMyProfile = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+const getMyProfile = async (req, res, next) => {
     const userId = (0, getUserId_1.getUserId)(req);
     if (!userId) {
         res.status(401).json({ message: "Authentication required" });
         return;
     }
     try {
-        const userProfile = yield prisma.user.findUnique({
+        const userProfile = await prisma.user.findUnique({
             where: { id: userId },
             select: {
                 id: true,
@@ -41,13 +32,13 @@ const getMyProfile = (req, res, next) => __awaiter(void 0, void 0, void 0, funct
         console.error("Error fetching my profile:", error);
         next(error);
     }
-});
+};
 exports.getMyProfile = getMyProfile;
-const getUserPublicProfile = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+const getUserPublicProfile = async (req, res, next) => {
     try {
         const { id } = req.params;
         console.log(`Attempting to fetch public profile for user with ID: ${id}`);
-        const userPublicProfile = yield prisma.user.findUnique({
+        const userPublicProfile = await prisma.user.findUnique({
             where: { id },
             select: {
                 id: true,
@@ -77,14 +68,14 @@ const getUserPublicProfile = (req, res, next) => __awaiter(void 0, void 0, void 
         console.error("Error in getUserPublicProfile:", error);
         next(error);
     }
-});
+};
 exports.getUserPublicProfile = getUserPublicProfile;
-const getAllMentors = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getAllMentors = async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
-        const mentors = yield prisma.user.findMany({
+        const mentors = await prisma.user.findMany({
             where: { role: "MENTOR" },
             skip: skip,
             take: limit,
@@ -95,7 +86,7 @@ const getAllMentors = (req, res) => __awaiter(void 0, void 0, void 0, function* 
                 profile: true,
             },
         });
-        const totalMentors = yield prisma.user.count({ where: { role: "MENTOR" } });
+        const totalMentors = await prisma.user.count({ where: { role: "MENTOR" } });
         res.status(200).json({
             mentors,
             totalPages: Math.ceil(totalMentors / limit),
@@ -105,9 +96,9 @@ const getAllMentors = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     catch (error) {
         res.status(500).json({ message: "Error fetching mentors." });
     }
-});
+};
 exports.getAllMentors = getAllMentors;
-const getAvailableSkills = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getAvailableSkills = async (req, res) => {
     const skills = [
         "Virtual Assistant",
         "UI/UX Designer",
@@ -151,12 +142,12 @@ const getAvailableSkills = (req, res) => __awaiter(void 0, void 0, void 0, funct
         "CRM Management (e.g., Salesforce, HubSpot)",
     ];
     res.status(200).json(skills);
-});
+};
 exports.getAvailableSkills = getAvailableSkills;
-const getMentorStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getMentorStats = async (req, res) => {
     const { id } = req.params;
     try {
-        const [menteeCount, pendingRequests, upcomingSessions, completedSessions, reviewAggregation,] = yield prisma.$transaction([
+        const [menteeCount, pendingRequests, upcomingSessions, completedSessions, reviewAggregation,] = await prisma.$transaction([
             prisma.mentorshipRequest.count({
                 where: { mentorId: id, status: "ACCEPTED" },
             }),
@@ -193,16 +184,16 @@ const getMentorStats = (req, res) => __awaiter(void 0, void 0, void 0, function*
         console.error(`Error fetching mentor stats for mentor ID ${id}:`, error);
         res.status(500).json({ message: "Error fetching mentor stats." });
     }
-});
+};
 exports.getMentorStats = getMentorStats;
-const getMenteeStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getMenteeStats = async (req, res) => {
     const userId = (0, getUserId_1.getUserId)(req);
     if (!userId) {
         res.status(401).json({ message: "Authentication error" });
         return;
     }
     try {
-        const [mentorCount, pendingRequests, upcomingSessions, completedSessions] = yield prisma.$transaction([
+        const [mentorCount, pendingRequests, upcomingSessions, completedSessions] = await prisma.$transaction([
             prisma.mentorshipRequest.count({
                 where: { menteeId: userId, status: "ACCEPTED" },
             }),
@@ -226,9 +217,9 @@ const getMenteeStats = (req, res) => __awaiter(void 0, void 0, void 0, function*
     catch (error) {
         res.status(500).json({ message: "Error fetching mentee stats." });
     }
-});
+};
 exports.getMenteeStats = getMenteeStats;
-const updateMyProfile = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const updateMyProfile = async (req, res) => {
     const userId = (0, getUserId_1.getUserId)(req);
     if (!userId) {
         res.status(401).json({ message: "Authentication error" });
@@ -241,13 +232,23 @@ const updateMyProfile = (req, res) => __awaiter(void 0, void 0, void 0, function
     }
     try {
         // Your existing profile update logic is preserved
-        const profile = yield prisma.profile.upsert({
+        const profile = await prisma.profile.upsert({
             where: { userId },
-            update: Object.assign({ name,
-                bio, skills: skills || [], goals }, (avatarUrl && { avatarUrl })),
-            create: Object.assign({ userId,
+            update: {
                 name,
-                bio, skills: skills || [], goals }, (avatarUrl && { avatarUrl })),
+                bio,
+                skills: skills || [],
+                goals,
+                ...(avatarUrl && { avatarUrl }),
+            },
+            create: {
+                userId,
+                name,
+                bio,
+                skills: skills || [],
+                goals,
+                ...(avatarUrl && { avatarUrl }),
+            },
         });
         // --- 2. START OF NEW AI EMBEDDING LOGIC ---
         // Combine the most important profile fields into a single string
@@ -257,9 +258,9 @@ const updateMyProfile = (req, res) => __awaiter(void 0, void 0, void 0, function
       Bio: ${bio}.
     `;
         // Generate the embedding from the text
-        const embedding = yield (0, ai_service_1.generateEmbedding)(profileText);
+        const embedding = await (0, ai_service_1.generateEmbedding)(profileText);
         // Save the generated embedding to the User model
-        yield prisma.user.update({
+        await prisma.user.update({
             where: { id: userId },
             data: {
                 profileEmbedding: embedding,
@@ -276,16 +277,16 @@ const updateMyProfile = (req, res) => __awaiter(void 0, void 0, void 0, function
         console.error("Error updating profile:", error);
         res.status(500).json({ message: "Error updating profile" });
     }
-});
+};
 exports.updateMyProfile = updateMyProfile;
-const getRecommendedMentors = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getRecommendedMentors = async (req, res) => {
     const userId = (0, getUserId_1.getUserId)(req);
     if (!userId) {
         res.status(401).json({ message: "Authentication error" });
         return;
     }
     try {
-        const menteeProfile = yield prisma.profile.findUnique({
+        const menteeProfile = await prisma.profile.findUnique({
             where: { userId },
             select: { skills: true, goals: true },
         });
@@ -293,7 +294,7 @@ const getRecommendedMentors = (req, res) => __awaiter(void 0, void 0, void 0, fu
             res.status(200).json([]);
             return;
         }
-        const recommendedMentors = yield prisma.user.findMany({
+        const recommendedMentors = await prisma.user.findMany({
             where: {
                 role: "MENTOR",
                 id: { not: userId },
@@ -314,5 +315,5 @@ const getRecommendedMentors = (req, res) => __awaiter(void 0, void 0, void 0, fu
     catch (error) {
         res.status(500).json({ message: "Error fetching recommended mentors." });
     }
-});
+};
 exports.getRecommendedMentors = getRecommendedMentors;

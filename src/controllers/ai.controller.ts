@@ -162,7 +162,6 @@ export const getAIMessages = async (
   }
 };
 
-// --- [OPTIMIZED] CHAT FUNCTION ---
 const chatWithAI = async (
   req: Request,
   res: Response,
@@ -179,8 +178,6 @@ const chatWithAI = async (
   }
 
   try {
-    // --- [NEW] Selective Context Fetching ---
-    // Define keywords that trigger a context search.
     const contextKeywords = [
       "goal",
       "session",
@@ -195,12 +192,10 @@ const chatWithAI = async (
     );
 
     let userContext = "";
-    // Only fetch context from the database if a relevant keyword is found.
     if (messageIncludesKeyword) {
       console.log("Context keyword detected. Fetching user data...");
       userContext = await getUserContext(userId);
     }
-    // --- End of Optimization ---
 
     const systemPrompt = `You are a helpful and friendly assistant for a mentorship platform called MentorMe. Your role is to be an encouraging coach.
 Here is the user's current context. Use it to provide personalized advice and answers. If the context is empty, you can ignore it.
@@ -437,5 +432,91 @@ export const getAiMentorMatches = async (
   } catch (error) {
     console.error("Error getting AI mentor matches:", error);
     res.status(500).json({ message: "Failed to retrieve mentor matches." });
+  }
+};
+
+// --- [NEW] Controller to summarize a session transcript ---
+export const summarizeTranscript = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const userId = getUserId(req);
+  const { sessionId, transcript } = req.body;
+
+  if (!userId) {
+    res.status(401).json({ message: "Authentication error." });
+    return;
+  }
+  if (!sessionId || !transcript) {
+    res
+      .status(400)
+      .json({ message: "Session ID and transcript are required." });
+    return;
+  }
+
+  try {
+    // 1. Verify the user is a participant of the session
+    const session = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        OR: [{ menteeId: userId }, { mentorId: userId }],
+      },
+    });
+
+    if (!session) {
+      res
+        .status(403)
+        .json({ message: "You are not authorized to access this session." });
+      return;
+    }
+
+    // 2. Prepare the prompt for the AI
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const prompt = `
+      You are an AI assistant for a mentorship platform. Your task is to analyze the following transcript of a mentorship session.
+      Please provide a concise, professional summary of the conversation.
+      After the summary, create a bulleted list of the key action items discussed for the mentee.
+      
+      Transcript:
+      ---
+      ${transcript}
+      ---
+    `;
+
+    // 3. Call the AI model
+    const result = await model.generateContent(prompt);
+    const aiResponseText = result.response.text();
+
+    // 4. Extract summary and action items (simple parsing)
+    const summaryMatch = aiResponseText.match(
+      /summary:(.*?)(action items:|$)/is
+    );
+    const actionItemsMatch = aiResponseText.match(/action items:(.*)/is);
+
+    const summary = summaryMatch
+      ? summaryMatch[1].trim()
+      : "Summary could not be generated.";
+    const actionItems = actionItemsMatch
+      ? actionItemsMatch[1]
+          .trim()
+          .split("\n")
+          .map((item) => item.replace(/^- /, "").trim())
+          .filter(Boolean)
+      : [];
+
+    // 5. Save the insights to the database
+    const insight = await prisma.sessionInsight.upsert({
+      where: { sessionId },
+      update: { summary, actionItems },
+      create: { sessionId, summary, actionItems },
+    });
+
+    res.status(200).json(insight);
+  } catch (error: any) {
+    console.error("Error summarizing transcript:", error);
+    res.status(500).json({
+      message: "Server error while summarizing transcript.",
+      error: error.message || "An unknown error occurred.",
+    });
   }
 };

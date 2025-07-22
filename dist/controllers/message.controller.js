@@ -1,27 +1,18 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createMessage = exports.getMessagesForConversation = exports.getConversations = void 0;
 const client_1 = require("@prisma/client");
 const getUserId_1 = require("../utils/getUserId");
 const prisma = new client_1.PrismaClient();
 // GET all conversations for the logged-in user
-const getConversations = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getConversations = async (req, res) => {
     const userId = (0, getUserId_1.getUserId)(req);
     if (!userId) {
         res.status(401).json({ message: "Authentication error" });
         return;
     }
     try {
-        const conversations = yield prisma.conversation.findMany({
+        const conversations = await prisma.conversation.findMany({
             where: {
                 participants: {
                     some: {
@@ -59,10 +50,10 @@ const getConversations = (req, res) => __awaiter(void 0, void 0, void 0, functio
         console.error("Error fetching conversations:", error);
         res.status(500).json({ message: "Server error fetching conversations" });
     }
-});
+};
 exports.getConversations = getConversations;
 // GET all messages for a specific conversation
-const getMessagesForConversation = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getMessagesForConversation = async (req, res) => {
     const userId = (0, getUserId_1.getUserId)(req);
     const { conversationId } = req.params;
     if (!userId) {
@@ -71,7 +62,7 @@ const getMessagesForConversation = (req, res) => __awaiter(void 0, void 0, void 
     }
     try {
         // FIX: First, verify the user is actually part of the conversation.
-        const conversation = yield prisma.conversation.findFirst({
+        const conversation = await prisma.conversation.findFirst({
             where: {
                 id: conversationId,
                 participants: {
@@ -88,7 +79,7 @@ const getMessagesForConversation = (req, res) => __awaiter(void 0, void 0, void 
             return;
         }
         // If authorized, fetch all messages.
-        const messages = yield prisma.message.findMany({
+        const messages = await prisma.message.findMany({
             where: { conversationId },
             orderBy: { createdAt: "asc" },
             include: {
@@ -111,10 +102,10 @@ const getMessagesForConversation = (req, res) => __awaiter(void 0, void 0, void 
         console.error(`Error fetching messages for convo ${conversationId}:`, error);
         res.status(500).json({ message: "Server error fetching messages" });
     }
-});
+};
 exports.getMessagesForConversation = getMessagesForConversation;
 // POST a new message
-const createMessage = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const createMessage = async (req, res) => {
     const userId = (0, getUserId_1.getUserId)(req);
     const { conversationId, content } = req.body;
     const io = req.app.locals.io;
@@ -125,7 +116,7 @@ const createMessage = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     try {
         // FIX: Use a database transaction to ensure creating the message and updating the
         // conversation timestamp happen together.
-        const [newMessage, updatedConversation] = yield prisma.$transaction([
+        const [newMessage, updatedConversation] = await prisma.$transaction([
             prisma.message.create({
                 data: {
                     content,
@@ -157,5 +148,5 @@ const createMessage = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         console.error("Error creating message:", error);
         res.status(500).json({ message: "Server error while sending message" });
     }
-});
+};
 exports.createMessage = createMessage;

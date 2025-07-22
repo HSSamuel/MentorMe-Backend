@@ -1,24 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __rest = (this && this.__rest) || function (s, e) {
-    var t = {};
-    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
-        t[p] = s[p];
-    if (s != null && typeof Object.getOwnPropertySymbols === "function")
-        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
-            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
-                t[p[i]] = s[p[i]];
-        }
-    return t;
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -43,11 +23,11 @@ const getUserId = (req) => {
         return req.user.id; // From Passport/Prisma
     return null;
 };
-const register = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const register = async (req, res) => {
     const { email, password, role } = req.body;
     // --- FIX: Check if a user with this email already exists ---
     try {
-        const existingUser = yield prisma.user.findUnique({
+        const existingUser = await prisma.user.findUnique({
             where: { email },
         });
         if (existingUser) {
@@ -64,9 +44,9 @@ const register = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             });
             return;
         }
-        const hashedPassword = yield bcryptjs_1.default.hash(password, 12);
+        const hashedPassword = await bcryptjs_1.default.hash(password, 12);
         // Create both the user and their profile in a single transaction
-        const user = yield prisma.user.create({
+        const user = await prisma.user.create({
             data: {
                 email,
                 password: hashedPassword,
@@ -81,22 +61,22 @@ const register = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 profile: true, // Include the new profile in the response
             },
         });
-        const { password: _ } = user, userWithoutPassword = __rest(user, ["password"]);
+        const { password: _, ...userWithoutPassword } = user;
         res.status(201).json(userWithoutPassword);
     }
     catch (error) {
         console.error("Registration Error:", error); // Log the actual error to the console
         res.status(500).json({ message: "Server error during registration" });
     }
-});
+};
 exports.register = register;
-const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const login = async (req, res) => {
     const { email, password } = req.body;
     try {
-        const user = yield prisma.user.findUnique({ where: { email } });
+        const user = await prisma.user.findUnique({ where: { email } });
         if (!user ||
             !user.password ||
-            !(yield bcryptjs_1.default.compare(password, user.password))) {
+            !(await bcryptjs_1.default.compare(password, user.password))) {
             res.status(401).json({ message: "Invalid credentials" });
             return;
         }
@@ -108,16 +88,16 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     catch (error) {
         res.status(500).json({ message: "Server error during login" });
     }
-});
+};
 exports.login = login;
-const getMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getMe = async (req, res) => {
     const userId = getUserId(req);
     if (!userId) {
         res.status(401).json({ message: "Authentication error" });
         return;
     }
     try {
-        const user = yield prisma.user.findUnique({
+        const user = await prisma.user.findUnique({
             where: { id: userId },
             select: {
                 id: true,
@@ -133,12 +113,12 @@ const getMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     catch (error) {
         res.status(500).json({ message: "Server error" });
     }
-});
+};
 exports.getMe = getMe;
-const forgotPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const forgotPassword = async (req, res) => {
     const { email } = req.body;
     try {
-        const user = yield prisma.user.findUnique({ where: { email } });
+        const user = await prisma.user.findUnique({ where: { email } });
         if (!user) {
             res.status(200).json({
                 message: "If a user with that email exists, a password reset link has been sent.",
@@ -151,7 +131,7 @@ const forgotPassword = (req, res) => __awaiter(void 0, void 0, void 0, function*
             .update(resetToken)
             .digest("hex");
         const passwordResetExpires = new Date(Date.now() + 10 * 60 * 1000); // Token expires in 10 minutes
-        yield prisma.user.update({
+        await prisma.user.update({
             where: { email },
             data: {
                 passwordResetToken,
@@ -159,7 +139,7 @@ const forgotPassword = (req, res) => __awaiter(void 0, void 0, void 0, function*
             },
         });
         const resetURL = `${config_1.default.get("FRONTEND_URL")}/reset-password/${resetToken}`;
-        yield (0, email_service_1.sendPasswordResetEmail)(user.email, resetURL);
+        await (0, email_service_1.sendPasswordResetEmail)(user.email, resetURL);
         res.status(200).json({
             message: "If a user with that email exists, a password reset link has been sent.",
         });
@@ -168,13 +148,13 @@ const forgotPassword = (req, res) => __awaiter(void 0, void 0, void 0, function*
         console.error("Forgot Password Error:", error);
         res.status(500).json({ message: "Server error" });
     }
-});
+};
 exports.forgotPassword = forgotPassword;
-const resetPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const resetPassword = async (req, res) => {
     const { token, password } = req.body;
     try {
         const hashedToken = crypto_1.default.createHash("sha256").update(token).digest("hex");
-        const user = yield prisma.user.findFirst({
+        const user = await prisma.user.findFirst({
             where: {
                 passwordResetToken: hashedToken,
                 passwordResetExpires: { gt: new Date() },
@@ -184,8 +164,8 @@ const resetPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             res.status(400).json({ message: "Token is invalid or has expired" });
             return;
         }
-        const hashedPassword = yield bcryptjs_1.default.hash(password, 12);
-        yield prisma.user.update({
+        const hashedPassword = await bcryptjs_1.default.hash(password, 12);
+        await prisma.user.update({
             where: { id: user.id },
             data: {
                 password: hashedPassword,
@@ -199,5 +179,5 @@ const resetPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         console.error("Reset Password Error:", error);
         res.status(500).json({ message: "Server error" });
     }
-});
+};
 exports.resetPassword = resetPassword;

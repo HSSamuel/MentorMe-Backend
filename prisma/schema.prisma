@@ -26,7 +26,7 @@ model User {
   receivedRequests     MentorshipRequest[] @relation("MentorRequests")
   mentorSessions       Session[]           @relation("MentorSessions")
   menteeSessions       Session[]           @relation("MenteeSessions")
-  messages             Message[]
+  sentMessages         Message[]           @relation("SentMessages")
   notifications        Notification[]
   availabilities       Availability[]
   aiConversations      AIConversation[]
@@ -36,12 +36,16 @@ model User {
   passwordResetExpires DateTime?
   conversations        Conversation[]      @relation(fields: [conversationIDs], references: [id])
   conversationIDs      String[]            @db.ObjectId
-  points    Int     @default(0)
-  levelId   String? @db.ObjectId
-  level     Level?  @relation(fields: [levelId], references: [id])
-  lastSeen        DateTime       @default(now()) @updatedAt
-  profileEmbedding Float[]
-  }
+  points               Int                 @default(0)
+  levelId              String?             @db.ObjectId
+  level                Level?              @relation(fields: [levelId], references: [id])
+  lastSeen             DateTime            @default(now()) @updatedAt
+  profileEmbedding     Float[]
+  
+  // --- [UPDATED] Correctly defined the many-to-many relation for read receipts ---
+  readMessages         Message[]           @relation("ReadByUsers", fields: [readMessageIDs], references: [id])
+  readMessageIDs       String[]            @db.ObjectId
+}
 
 model Profile {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -59,16 +63,12 @@ model MentorshipRequest {
   menteeId  String   @db.ObjectId
   mentorId  String   @db.ObjectId
   status    String   @default("PENDING")
-  
-  // Timestamps
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt // This line ensures the field is always updated
-
-  // Relations
-  mentee   User   @relation("MenteeRequests", fields: [menteeId], references: [id])
-  mentor   User   @relation("MentorRequests", fields: [mentorId], references: [id])
-  review   Review?
-  goals    Goal[]
+  updatedAt DateTime @updatedAt
+  mentee    User     @relation("MenteeRequests", fields: [menteeId], references: [id])
+  mentor    User     @relation("MentorRequests", fields: [mentorId], references: [id])
+  review    Review?
+  goals     Goal[]
 }
 
 model SessionInsight {
@@ -81,15 +81,15 @@ model SessionInsight {
 }
 
 model Session {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  mentorId  String   @db.ObjectId
-  menteeId  String   @db.ObjectId
+  id        String          @id @default(auto()) @map("_id") @db.ObjectId
+  mentorId  String          @db.ObjectId
+  menteeId  String          @db.ObjectId
   date      DateTime
   rating    Int?
   feedback  String?
-  mentor    User     @relation("MentorSessions", fields: [mentorId], references: [id])
-  mentee    User     @relation("MenteeSessions", fields: [menteeId], references: [id])
-  createdAt DateTime @default(now())
+  mentor    User            @relation("MentorSessions", fields: [mentorId], references: [id])
+  mentee    User            @relation("MenteeSessions", fields: [menteeId], references: [id])
+  createdAt DateTime        @default(now())
   insights  SessionInsight?
 }
 
@@ -111,17 +111,14 @@ model Goal {
   isCompleted         Boolean           @default(false)
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
-
-  category    String   @default("General")
-  status      String   @default("InProgress")
-  dueDate     DateTime?
-
-  // S.M.A.R.T. components
-  specific    String
-  measurable  String
-  achievable  String
-  relevant    String
-  timeBound   String
+  category            String            @default("General")
+  status              String            @default("InProgress")
+  dueDate             DateTime?
+  specific            String
+  measurable          String
+  achievable          String
+  relevant            String
+  timeBound           String
 }
 
 model Notification {
@@ -133,6 +130,7 @@ model Notification {
   isRead    Boolean          @default(false)
   link      String?
   createdAt DateTime         @default(now())
+
   @@index([userId])
 }
 
@@ -159,9 +157,13 @@ model Message {
   conversationId String       @db.ObjectId
   conversation   Conversation @relation(fields: [conversationId], references: [id])
   senderId       String       @db.ObjectId
-  sender         User         @relation(fields: [senderId], references: [id])
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id])
   content        String
   createdAt      DateTime     @default(now())
+
+  // --- [UPDATED] Correctly defined the many-to-many relation for read receipts ---
+  readBy         User[]       @relation("ReadByUsers", fields: [readByIds], references: [id])
+  readByIds      String[]     @db.ObjectId
 }
 
 model AIConversation {

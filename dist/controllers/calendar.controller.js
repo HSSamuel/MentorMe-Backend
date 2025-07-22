@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.googleAuthCallback = exports.googleAuth = void 0;
 const calendar_service_1 = require("../services/calendar.service");
@@ -35,7 +26,7 @@ exports.googleAuth = googleAuth;
 /**
  * Handles the callback from Google after user grants permission.
  */
-const googleAuthCallback = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const googleAuthCallback = async (req, res) => {
     const { code, state } = req.query;
     const userId = state; // The userId we passed in the state
     if (!code) {
@@ -44,9 +35,9 @@ const googleAuthCallback = (req, res) => __awaiter(void 0, void 0, void 0, funct
         return;
     }
     try {
-        const tokens = yield (0, calendar_service_1.getTokensFromCode)(code);
+        const tokens = await (0, calendar_service_1.getTokensFromCode)(code);
         // Securely store the tokens in the database for the user
-        yield prisma.user.update({
+        await prisma.user.update({
             where: { id: userId },
             data: {
                 googleAccessToken: tokens.access_token,
@@ -60,5 +51,5 @@ const googleAuthCallback = (req, res) => __awaiter(void 0, void 0, void 0, funct
         console.error("Error getting Google Calendar tokens:", error);
         res.status(500).send("Failed to authenticate with Google Calendar.");
     }
-});
+};
 exports.googleAuthCallback = googleAuthCallback;

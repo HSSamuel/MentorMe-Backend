@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -39,10 +30,10 @@ const cosineSimilarity = (vecA, vecB) => {
  * @param {string} text - The input text to be converted into an embedding.
  * @returns {Promise<number[]>} - A promise that resolves to an array of numbers representing the embedding.
  */
-const generateEmbedding = (text) => __awaiter(void 0, void 0, void 0, function* () {
+const generateEmbedding = async (text) => {
     try {
         const model = genAI.getGenerativeModel({ model: "embedding-001" });
-        const result = yield model.embedContent(text);
+        const result = await model.embedContent(text);
         const embedding = result.embedding;
         return embedding.values;
     }
@@ -50,7 +41,7 @@ const generateEmbedding = (text) => __awaiter(void 0, void 0, void 0, function* 
         console.error("Error generating embedding:", error);
         throw new Error("Failed to generate text embedding.");
     }
-});
+};
 exports.generateEmbedding = generateEmbedding;
 /**
  * Finds the top N mentor matches for a user based on profile embedding similarity.
@@ -58,9 +49,9 @@ exports.generateEmbedding = generateEmbedding;
  * @param topN - The number of top matches to return.
  * @returns A list of the top N mentor users, including their profiles.
  */
-const findTopMentorMatches = (userId_1, ...args_1) => __awaiter(void 0, [userId_1, ...args_1], void 0, function* (userId, topN = 5) {
+const findTopMentorMatches = async (userId, topN = 5) => {
     // 1. Get the current user's profile embedding
-    const currentUser = yield client_1.default.user.findUnique({
+    const currentUser = await client_1.default.user.findUnique({
         where: { id: userId },
         select: { profileEmbedding: true },
     });
@@ -71,7 +62,7 @@ const findTopMentorMatches = (userId_1, ...args_1) => __awaiter(void 0, [userId_
     }
     const currentUserVector = currentUser.profileEmbedding;
     // 2. Get all potential mentors
-    const mentors = yield client_1.default.user.findMany({
+    const mentors = await client_1.default.user.findMany({
         where: {
             id: { not: userId },
             role: "MENTOR", // It's good practice to ensure we only match with mentors
@@ -92,5 +83,5 @@ const findTopMentorMatches = (userId_1, ...args_1) => __awaiter(void 0, [userId_
     mentorScores.sort((a, b) => b.similarity - a.similarity);
     // 5. Return the top N mentors
     return mentorScores.slice(0, topN).map((score) => score.mentor);
-});
+};
 exports.findTopMentorMatches = findTopMentorMatches;

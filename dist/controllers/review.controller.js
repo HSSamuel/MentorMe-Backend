@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getReviewsForMentor = exports.createReview = void 0;
 const client_1 = require("@prisma/client");
@@ -18,7 +9,7 @@ const getUserId = (req) => {
     return req.user.userId;
 };
 // POST /reviews
-const createReview = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const createReview = async (req, res) => {
     const userId = getUserId(req);
     const { mentorshipRequestId, rating, comment } = req.body;
     if (!userId) {
@@ -28,7 +19,7 @@ const createReview = (req, res) => __awaiter(void 0, void 0, void 0, function* (
     }
     try {
         // Verify that the user is the mentee of this specific mentorship request
-        const mentorship = yield prisma.mentorshipRequest.findFirst({
+        const mentorship = await prisma.mentorshipRequest.findFirst({
             where: {
                 id: mentorshipRequestId,
                 menteeId: userId,
@@ -43,7 +34,7 @@ const createReview = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             return;
         }
         // Check if a review for this mentorship already exists
-        const existingReview = yield prisma.review.findFirst({
+        const existingReview = await prisma.review.findFirst({
             where: { mentorshipRequestId },
         });
         if (existingReview) {
@@ -53,7 +44,7 @@ const createReview = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                 .json({ message: "A review for this mentorship already exists." });
             return;
         }
-        const newReview = yield prisma.review.create({
+        const newReview = await prisma.review.create({
             data: {
                 mentorshipRequestId,
                 rating,
@@ -66,13 +57,13 @@ const createReview = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         console.error("Error creating review:", error);
         res.status(500).json({ message: "Server error while creating review." });
     }
-});
+};
 exports.createReview = createReview;
 // GET /reviews/mentor/:mentorId
-const getReviewsForMentor = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getReviewsForMentor = async (req, res) => {
     const { mentorId } = req.params;
     try {
-        const reviews = yield prisma.review.findMany({
+        const reviews = await prisma.review.findMany({
             where: {
                 mentorshipRequest: {
                     mentorId: mentorId,
@@ -101,5 +92,5 @@ const getReviewsForMentor = (req, res) => __awaiter(void 0, void 0, void 0, func
         console.error("Error fetching reviews:", error);
         res.status(500).json({ message: "Server error while fetching reviews." });
     }
-});
+};
 exports.getReviewsForMentor = getReviewsForMentor;

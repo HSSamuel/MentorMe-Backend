@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createCalendarEvent = exports.getTokensFromCode = exports.generateAuthUrl = void 0;
 const googleapis_1 = require("googleapis");
@@ -32,16 +23,16 @@ exports.generateAuthUrl = generateAuthUrl;
 /**
  * Exchanges an authorization code for access and refresh tokens.
  */
-const getTokensFromCode = (code) => __awaiter(void 0, void 0, void 0, function* () {
-    const { tokens } = yield oauth2Client.getToken(code);
+const getTokensFromCode = async (code) => {
+    const { tokens } = await oauth2Client.getToken(code);
     return tokens;
-});
+};
 exports.getTokensFromCode = getTokensFromCode;
 /**
  * Creates a new event in the user's Google Calendar.
  */
-const createCalendarEvent = (userId, eventDetails) => __awaiter(void 0, void 0, void 0, function* () {
-    const user = yield prisma.user.findUnique({ where: { id: userId } });
+const createCalendarEvent = async (userId, eventDetails) => {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.googleAccessToken || !user.googleRefreshToken) {
         throw new Error("User is not authenticated with Google Calendar.");
     }
@@ -50,7 +41,7 @@ const createCalendarEvent = (userId, eventDetails) => __awaiter(void 0, void 0, 
         refresh_token: user.googleRefreshToken,
     });
     const calendar = googleapis_1.google.calendar({ version: "v3", auth: oauth2Client });
-    yield calendar.events.insert({
+    await calendar.events.insert({
         calendarId: "primary",
         requestBody: {
             summary: eventDetails.summary,
@@ -66,5 +57,5 @@ const createCalendarEvent = (userId, eventDetails) => __awaiter(void 0, void 0, 
             attendees: eventDetails.attendees.map((email) => ({ email })),
         },
     });
-});
+};
 exports.createCalendarEvent = createCalendarEvent;

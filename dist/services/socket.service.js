@@ -5,22 +5,29 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.initializeSocket = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const client_1 = require("@prisma/client");
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
+const prisma = new client_1.PrismaClient();
+// A map to track user sockets and online status globally
+const userSockets = new Map(); // Map<userId, socketId>
 let io;
 const initializeSocket = (ioInstance) => {
     io = ioInstance;
     console.log("✅ Real-time data socket service initialized.");
     // Use the main application's JWT for authentication
-    // This token is different from the Twilio video token
     io.use((socket, next) => {
         const token = socket.handshake.auth.token;
         if (!token) {
             return next(new Error("Authentication error: Token not provided."));
         }
         try {
-            // We only need the userId from the standard app token
+            // Be flexible and check for 'id' or 'userId' in the token payload.
             const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
-            socket.user = { userId: decoded.userId };
+            const userId = decoded.id || decoded.userId;
+            if (!userId) {
+                throw new Error("User ID not found in token");
+            }
+            socket.user = { userId };
             next();
         }
         catch (err) {
@@ -28,34 +35,94 @@ const initializeSocket = (ioInstance) => {
         }
     });
     io.on("connection", (socket) => {
-        var _a;
-        const userId = (_a = socket.user) === null || _a === void 0 ? void 0 : _a.userId;
+        const userId = socket.user?.userId;
         if (!userId) {
             return socket.disconnect(true);
         }
         console.log(`\n🟢 Data socket connected: Socket ID ${socket.id}, User ID ${userId}`);
-        // --- Event Handlers for Data Features ---
-        // Allows the client to join a specific room for chat and notepad updates
+        // --- [NEW] Global Presence and Personal Room Logic for Main Chat ---
+        userSockets.set(userId, socket.id);
+        socket.join(userId); // Join a personal room for direct notifications
+        io.emit("userStatusChange", { userId, isOnline: true, lastSeen: null });
+        // --- Event Handlers for Video Call Features (Existing Code) ---
         socket.on("join-data-room", (roomId) => {
             socket.join(roomId);
             console.log(`[Data] User ${socket.id} joined data room ${roomId}`);
         });
-        // Handles real-time updates for the shared notepad
         socket.on("notepad-change", (data) => {
-            // Broadcast the change to everyone else in the room
             socket.to(data.roomId).emit("notepad-update", data.content);
         });
-        // Handles sending and receiving real-time chat messages
         socket.on("send-chat-message", (data) => {
-            // Broadcast the message to everyone else in the room
             socket.to(data.roomId).emit("new-chat-message", {
                 message: data.message,
                 senderName: data.senderName,
-                socketId: socket.id, // Identify the sender
+                socketId: socket.id,
             });
         });
-        socket.on("disconnect", () => {
+        // --- [NEW] Event Handlers for Main Messaging Feature ---
+        socket.on("joinConversation", (conversationId) => {
+            socket.join(conversationId);
+            console.log(`[Messages] User ${userId} joined conversation ${conversationId}`);
+        });
+        socket.on("sendMessage", async (data, callback) => {
+            try {
+                const { conversationId, content, tempId } = data;
+                const [newMessage, updatedConversation] = await prisma.$transaction([
+                    prisma.message.create({
+                        data: { content, senderId: userId, conversationId },
+                        include: {
+                            sender: {
+                                select: {
+                                    id: true,
+                                    profile: { select: { name: true, avatarUrl: true } },
+                                },
+                            },
+                        },
+                    }),
+                    prisma.conversation.update({
+                        where: { id: conversationId },
+                        data: { updatedAt: new Date() },
+                        include: { participants: true },
+                    }),
+                ]);
+                const messageWithTempId = { ...newMessage, tempId };
+                updatedConversation.participants.forEach((participant) => {
+                    io.to(participant.id).emit("receiveMessage", messageWithTempId);
+                });
+                if (callback)
+                    callback({ success: true });
+            }
+            catch (error) {
+                console.error("[Messages] Error in sendMessage:", error);
+                if (callback)
+                    callback({ success: false, error: "Failed to save message." });
+            }
+        });
+        socket.on("startTyping", ({ conversationId }) => {
+            socket
+                .to(conversationId)
+                .emit("userTyping", { conversationId, isTyping: true });
+        });
+        socket.on("stopTyping", ({ conversationId }) => {
+            socket
+                .to(conversationId)
+                .emit("userTyping", { conversationId, isTyping: false });
+        });
+        socket.on("disconnect", async () => {
             console.log(`\n🔴 Data socket disconnected: Socket ID ${socket.id}`);
+            // --- [NEW] Global Presence on Disconnect for Main Chat ---
+            userSockets.delete(userId);
+            const lastSeen = new Date().toISOString();
+            try {
+                await prisma.user.update({
+                    where: { id: userId },
+                    data: { lastSeen },
+                });
+                io.emit("userStatusChange", { userId, isOnline: false, lastSeen });
+            }
+            catch (error) {
+                console.error(`Failed to update lastSeen for user ${userId}`, error);
+            }
         });
     });
 };
