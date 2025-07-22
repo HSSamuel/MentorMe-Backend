@@ -1,12 +1,14 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateUserRole = exports.getStats = exports.assignMentor = exports.getAllSessions = exports.getAllUsers = exports.getAllMatches = void 0;
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
+const client_1 = __importDefault(require("../client"));
 // Ensure this function is exported
 const getAllMatches = async (req, res) => {
     try {
-        const matches = await prisma.mentorshipRequest.findMany({
+        const matches = await client_1.default.mentorshipRequest.findMany({
             include: {
                 mentor: {
                     select: {
@@ -38,12 +40,12 @@ const getAllUsers = async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20; // Default to 20 per page
         const skip = (page - 1) * limit;
-        const users = await prisma.user.findMany({
+        const users = await client_1.default.user.findMany({
             skip: skip,
             take: limit,
             include: { profile: true },
         });
-        const totalUsers = await prisma.user.count();
+        const totalUsers = await client_1.default.user.count();
         res.status(200).json({
             users,
             totalPages: Math.ceil(totalUsers / limit),
@@ -58,14 +60,14 @@ exports.getAllUsers = getAllUsers;
 // GET /admin/sessions
 const getAllSessions = async (req, res) => {
     try {
-        const sessions = await prisma.session.findMany({
+        const sessions = await client_1.default.session.findMany({
             include: {
                 mentor: { select: { profile: true } },
                 mentee: { select: { profile: true } },
             },
             orderBy: { date: "desc" },
         });
-        const totalCount = await prisma.session.count();
+        const totalCount = await client_1.default.session.count();
         res.status(200).json({ totalCount, sessions });
     }
     catch (error) {
@@ -81,7 +83,7 @@ const assignMentor = async (req, res) => {
         return;
     }
     try {
-        const newRequest = await prisma.mentorshipRequest.create({
+        const newRequest = await client_1.default.mentorshipRequest.create({
             data: {
                 menteeId,
                 mentorId,
@@ -98,14 +100,14 @@ exports.assignMentor = assignMentor;
 // GET /admin/stats
 const getStats = async (req, res) => {
     try {
-        const totalUsers = await prisma.user.count();
-        const totalMentors = await prisma.user.count({ where: { role: "MENTOR" } });
-        const totalMentees = await prisma.user.count({ where: { role: "MENTEE" } });
-        const totalMatches = await prisma.mentorshipRequest.count({
+        const totalUsers = await client_1.default.user.count();
+        const totalMentors = await client_1.default.user.count({ where: { role: "MENTOR" } });
+        const totalMentees = await client_1.default.user.count({ where: { role: "MENTEE" } });
+        const totalMatches = await client_1.default.mentorshipRequest.count({
             where: { status: "ACCEPTED" },
         });
-        const totalSessions = await prisma.session.count();
-        const pendingRequests = await prisma.mentorshipRequest.count({
+        const totalSessions = await client_1.default.session.count();
+        const pendingRequests = await client_1.default.mentorshipRequest.count({
             where: { status: "PENDING" },
         });
         res.status(200).json({
@@ -126,7 +128,7 @@ const updateUserRole = async (req, res) => {
     const { id } = req.params;
     const { role } = req.body;
     try {
-        const updatedUser = await prisma.user.update({
+        const updatedUser = await client_1.default.user.update({
             where: { id },
             data: { role: role },
         });

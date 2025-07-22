@@ -1,10 +1,12 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getRecommendedMentors = exports.updateMyProfile = exports.getMenteeStats = exports.getMentorStats = exports.getAvailableSkills = exports.getAllMentors = exports.getUserPublicProfile = exports.getMyProfile = void 0;
-const client_1 = require("@prisma/client");
+const client_1 = __importDefault(require("../client"));
 const getUserId_1 = require("../utils/getUserId");
 const ai_service_1 = require("../services/ai.service");
-const prisma = new client_1.PrismaClient();
 const getMyProfile = async (req, res, next) => {
     const userId = (0, getUserId_1.getUserId)(req);
     if (!userId) {
@@ -12,7 +14,7 @@ const getMyProfile = async (req, res, next) => {
         return;
     }
     try {
-        const userProfile = await prisma.user.findUnique({
+        const userProfile = await client_1.default.user.findUnique({
             where: { id: userId },
             select: {
                 id: true,
@@ -38,7 +40,7 @@ const getUserPublicProfile = async (req, res, next) => {
     try {
         const { id } = req.params;
         console.log(`Attempting to fetch public profile for user with ID: ${id}`);
-        const userPublicProfile = await prisma.user.findUnique({
+        const userPublicProfile = await client_1.default.user.findUnique({
             where: { id },
             select: {
                 id: true,
@@ -75,7 +77,7 @@ const getAllMentors = async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
-        const mentors = await prisma.user.findMany({
+        const mentors = await client_1.default.user.findMany({
             where: { role: "MENTOR" },
             skip: skip,
             take: limit,
@@ -86,7 +88,7 @@ const getAllMentors = async (req, res) => {
                 profile: true,
             },
         });
-        const totalMentors = await prisma.user.count({ where: { role: "MENTOR" } });
+        const totalMentors = await client_1.default.user.count({ where: { role: "MENTOR" } });
         res.status(200).json({
             mentors,
             totalPages: Math.ceil(totalMentors / limit),
@@ -147,20 +149,20 @@ exports.getAvailableSkills = getAvailableSkills;
 const getMentorStats = async (req, res) => {
     const { id } = req.params;
     try {
-        const [menteeCount, pendingRequests, upcomingSessions, completedSessions, reviewAggregation,] = await prisma.$transaction([
-            prisma.mentorshipRequest.count({
+        const [menteeCount, pendingRequests, upcomingSessions, completedSessions, reviewAggregation,] = await client_1.default.$transaction([
+            client_1.default.mentorshipRequest.count({
                 where: { mentorId: id, status: "ACCEPTED" },
             }),
-            prisma.mentorshipRequest.count({
+            client_1.default.mentorshipRequest.count({
                 where: { mentorId: id, status: "PENDING" },
             }),
-            prisma.session.count({
+            client_1.default.session.count({
                 where: { mentorId: id, date: { gte: new Date() } },
             }),
-            prisma.session.count({
+            client_1.default.session.count({
                 where: { mentorId: id, date: { lt: new Date() } },
             }),
-            prisma.review.aggregate({
+            client_1.default.review.aggregate({
                 where: {
                     mentorshipRequest: {
                         mentorId: id,
@@ -193,17 +195,17 @@ const getMenteeStats = async (req, res) => {
         return;
     }
     try {
-        const [mentorCount, pendingRequests, upcomingSessions, completedSessions] = await prisma.$transaction([
-            prisma.mentorshipRequest.count({
+        const [mentorCount, pendingRequests, upcomingSessions, completedSessions] = await client_1.default.$transaction([
+            client_1.default.mentorshipRequest.count({
                 where: { menteeId: userId, status: "ACCEPTED" },
             }),
-            prisma.mentorshipRequest.count({
+            client_1.default.mentorshipRequest.count({
                 where: { menteeId: userId, status: "PENDING" },
             }),
-            prisma.session.count({
+            client_1.default.session.count({
                 where: { menteeId: userId, date: { gte: new Date() } },
             }),
-            prisma.session.count({
+            client_1.default.session.count({
                 where: { menteeId: userId, date: { lt: new Date() } },
             }),
         ]);
@@ -232,7 +234,7 @@ const updateMyProfile = async (req, res) => {
     }
     try {
         // Your existing profile update logic is preserved
-        const profile = await prisma.profile.upsert({
+        const profile = await client_1.default.profile.upsert({
             where: { userId },
             update: {
                 name,
@@ -260,7 +262,7 @@ const updateMyProfile = async (req, res) => {
         // Generate the embedding from the text
         const embedding = await (0, ai_service_1.generateEmbedding)(profileText);
         // Save the generated embedding to the User model
-        await prisma.user.update({
+        await client_1.default.user.update({
             where: { id: userId },
             data: {
                 profileEmbedding: embedding,
@@ -286,7 +288,7 @@ const getRecommendedMentors = async (req, res) => {
         return;
     }
     try {
-        const menteeProfile = await prisma.profile.findUnique({
+        const menteeProfile = await client_1.default.profile.findUnique({
             where: { userId },
             select: { skills: true, goals: true },
         });
@@ -294,7 +296,7 @@ const getRecommendedMentors = async (req, res) => {
             res.status(200).json([]);
             return;
         }
-        const recommendedMentors = await prisma.user.findMany({
+        const recommendedMentors = await client_1.default.user.findMany({
             where: {
                 role: "MENTOR",
                 id: { not: userId },

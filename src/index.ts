@@ -8,6 +8,8 @@ import { createServer } from "http";
 import path from "path";
 import rateLimit from "express-rate-limit";
 import MongoStore from "connect-mongo";
+// --- [ADDED] Import the Server class from socket.io ---
+import { Server } from "socket.io";
 
 // Route handlers
 import authRoutes from "./routes/auth.routes";
@@ -21,13 +23,12 @@ import messageRoutes from "./routes/message.routes";
 import notificationRoutes from "./routes/notification.routes";
 import calendarRoutes from "./routes/calendar.routes";
 import aiRoutes from "./routes/ai.routes";
-// --- [NEW] Import the new routes for Stream token generation ---
 import streamRoutes from "./routes/stream.routes";
 
 // Configurations and Services
 import "./config/passport";
-// The old socket service is no longer needed for the main chat
-// import { initializeSocket } from "./services/socket.service";
+// --- [ADDED] Import the socket service to initialize it ---
+import { initializeSocket } from "./services/socket.service";
 import { jsonErrorHandler } from "./middleware/error.middleware";
 import "./jobs/reminder.cron";
 
@@ -116,7 +117,6 @@ app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/ai", aiRoutes);
-// --- [NEW] This line registers the /api/stream/token endpoint ---
 app.use("/api/stream", streamRoutes);
 
 app.get("/", (req, res) => {
@@ -126,6 +126,19 @@ app.get("/", (req, res) => {
 app.use(jsonErrorHandler);
 
 const httpServer = createServer(app);
+
+// --- [ADDED] Socket.IO Server Initialization ---
+// Create a new Socket.IO server and attach it to the HTTP server.
+const io = new Server(httpServer, {
+  cors: corsOptions,
+});
+
+// Attach the 'io' instance to the app's locals to make it accessible in controllers.
+app.locals.io = io;
+
+// Initialize all the socket event listeners (like 'connection', 'join', etc.).
+initializeSocket(io);
+// --- End of Socket.IO Initialization ---
 
 // --- Start Server ---
 const startServer = async () => {

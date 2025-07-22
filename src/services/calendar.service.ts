@@ -1,7 +1,5 @@
 import { google } from "googleapis";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from "../client";
 
 // Initialize the Google OAuth2 client
 const oauth2Client = new google.auth.OAuth2(

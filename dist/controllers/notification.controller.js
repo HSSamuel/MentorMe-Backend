@@ -1,8 +1,10 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteAllNotifications = exports.deleteNotification = exports.markAllAsRead = exports.markAsRead = exports.getNotifications = void 0;
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
+const client_1 = __importDefault(require("../client"));
 const getUserId = (req) => {
     if (!req.user || !("userId" in req.user))
         return null;
@@ -17,7 +19,7 @@ const getNotifications = async (req, res) => {
         return;
     }
     try {
-        const notifications = await prisma.notification.findMany({
+        const notifications = await client_1.default.notification.findMany({
             where: { userId },
             orderBy: { createdAt: "desc" },
         });
@@ -38,7 +40,7 @@ const markAsRead = async (req, res) => {
         return;
     }
     try {
-        await prisma.notification.updateMany({
+        await client_1.default.notification.updateMany({
             where: { id, userId }, // Ensure user can only update their own notifications
             data: { isRead: true },
         });
@@ -60,7 +62,7 @@ const markAllAsRead = async (req, res) => {
         return;
     }
     try {
-        await prisma.notification.updateMany({
+        await client_1.default.notification.updateMany({
             where: { userId, isRead: false },
             data: { isRead: true },
         });
@@ -81,7 +83,7 @@ const deleteNotification = async (req, res) => {
         return;
     }
     try {
-        const notification = await prisma.notification.findUnique({
+        const notification = await client_1.default.notification.findUnique({
             where: { id: notificationId },
         });
         if (!notification || notification.userId !== userId) {
@@ -92,7 +94,7 @@ const deleteNotification = async (req, res) => {
             });
             return;
         }
-        await prisma.notification.delete({ where: { id: notificationId } });
+        await client_1.default.notification.delete({ where: { id: notificationId } });
         res.status(200).json({ message: "Notification deleted successfully." });
     }
     catch (error) {
@@ -110,7 +112,7 @@ const deleteAllNotifications = async (req, res) => {
     }
     try {
         // The TypeScript compiler now knows for certain that 'userId' is a string here.
-        await prisma.notification.deleteMany({
+        await client_1.default.notification.deleteMany({
             where: { userId: userId },
         });
         res.status(200).json({ message: "All notifications deleted successfully." });

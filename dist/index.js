@@ -13,6 +13,8 @@ const http_1 = require("http");
 const path_1 = __importDefault(require("path"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const connect_mongo_1 = __importDefault(require("connect-mongo"));
+// --- [ADDED] Import the Server class from socket.io ---
+const socket_io_1 = require("socket.io");
 // Route handlers
 const auth_routes_1 = __importDefault(require("./routes/auth.routes"));
 const user_routes_1 = __importDefault(require("./routes/user.routes"));
@@ -25,12 +27,11 @@ const message_routes_1 = __importDefault(require("./routes/message.routes"));
 const notification_routes_1 = __importDefault(require("./routes/notification.routes"));
 const calendar_routes_1 = __importDefault(require("./routes/calendar.routes"));
 const ai_routes_1 = __importDefault(require("./routes/ai.routes"));
-// --- [NEW] Import the new routes for Stream token generation ---
 const stream_routes_1 = __importDefault(require("./routes/stream.routes"));
 // Configurations and Services
 require("./config/passport");
-// The old socket service is no longer needed for the main chat
-// import { initializeSocket } from "./services/socket.service";
+// --- [ADDED] Import the socket service to initialize it ---
+const socket_service_1 = require("./services/socket.service");
 const error_middleware_1 = require("./middleware/error.middleware");
 require("./jobs/reminder.cron");
 const app = (0, express_1.default)();
@@ -101,13 +102,22 @@ app.use("/api/messages", message_routes_1.default);
 app.use("/api/notifications", notification_routes_1.default);
 app.use("/api/calendar", calendar_routes_1.default);
 app.use("/api/ai", ai_routes_1.default);
-// --- [NEW] This line registers the /api/stream/token endpoint ---
 app.use("/api/stream", stream_routes_1.default);
 app.get("/", (req, res) => {
     res.send("Mentor Backend API is running!");
 });
 app.use(error_middleware_1.jsonErrorHandler);
 const httpServer = (0, http_1.createServer)(app);
+// --- [ADDED] Socket.IO Server Initialization ---
+// Create a new Socket.IO server and attach it to the HTTP server.
+const io = new socket_io_1.Server(httpServer, {
+    cors: corsOptions,
+});
+// Attach the 'io' instance to the app's locals to make it accessible in controllers.
+app.locals.io = io;
+// Initialize all the socket event listeners (like 'connection', 'join', etc.).
+(0, socket_service_1.initializeSocket)(io);
+// --- End of Socket.IO Initialization ---
 // --- Start Server ---
 const startServer = async () => {
     try {

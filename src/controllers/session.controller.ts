@@ -1,18 +1,16 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
 import { createCalendarEvent } from "../services/calendar.service";
 import { getUserId } from "../utils/getUserId";
 import { awardPoints } from "../services/gamification.service";
 import jwt from "jsonwebtoken";
 import Twilio from "twilio";
+import prisma from "../client";
 
 // --- AI Client Imports and Initialization ---
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { CohereClient } from "cohere-ai";
 
-const prisma = new PrismaClient();
-
-// --- [NEW] Twilio Initialization ---
+// --- Twilio Initialization ---
 const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
 const twilioApiKeySid = process.env.TWILIO_API_KEY_SID;
 const twilioApiKeySecret = process.env.TWILIO_API_KEY_SECRET;
@@ -140,6 +138,7 @@ export const setAvailability = async (
   res: Response
 ): Promise<void> => {
   const mentorId = getUserId(req);
+  // This line retrieves the Socket.IO instance that was attached to the app in `index.ts`.
   const io = req.app.locals.io;
 
   if (!mentorId) {
@@ -161,7 +160,13 @@ export const setAvailability = async (
       await prisma.availability.createMany({ data: availabilityData });
     }
 
-    io.emit("availabilityUpdated", { mentorId });
+    // --- [ADDED] Safety check to prevent crashing if the io object is not available ---
+    if (io) {
+      // This emits a real-time event to all connected clients.
+      io.emit("availabilityUpdated", { mentorId });
+    } else {
+      console.warn("Socket.IO not initialized, skipping emit event.");
+    }
 
     res.status(200).json({ message: "Availability updated successfully." });
   } catch (error) {
@@ -319,7 +324,6 @@ export const submitFeedback = async (
   }
 };
 
-// --- [MODIFIED] generateVideoCallToken now uses Twilio ---
 export const generateVideoCallToken = async (
   req: Request,
   res: Response
@@ -415,7 +419,12 @@ export const notifyMentorOfCall = async (
     });
 
     const io = req.app.locals.io;
-    io.to(mentorId).emit("newNotification", notification);
+    // --- [ADDED] Safety check for the io object ---
+    if (io) {
+      io.to(mentorId).emit("newNotification", notification);
+    } else {
+      console.warn("Socket.IO not initialized, skipping notification emit.");
+    }
 
     console.log(`Notification sent to mentor ${mentorId} for video call.`);
     res.status(200).json({ message: "Notification sent successfully." });
@@ -530,11 +539,9 @@ export const getSessionInsights = async (
     });
 
     if (!insights) {
-      res
-        .status(404)
-        .json({
-          message: "No insights have been generated for this session yet.",
-        });
+      res.status(404).json({
+        message: "No insights have been generated for this session yet.",
+      });
       return;
     }
 
@@ -542,5 +549,36 @@ export const getSessionInsights = async (
   } catch (error) {
     console.error("Error fetching session insights:", error);
     res.status(500).json({ message: "Failed to fetch session insights." });
+  }
+};
+
+export const getSessionDetails = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { sessionId } = req.params;
+  const userId = getUserId(req);
+
+  try {
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        mentor: { include: { profile: true } },
+        mentee: { include: { profile: true } },
+      },
+    });
+
+    if (
+      !session ||
+      (session.mentorId !== userId && session.menteeId !== userId)
+    ) {
+      res.status(404).json({ message: "Session not found or access denied." });
+      return;
+    }
+
+    res.status(200).json(session);
+  } catch (error) {
+    console.error("Error fetching session details:", error);
+    res.status(500).json({ message: "Error fetching session details." });
   }
 };

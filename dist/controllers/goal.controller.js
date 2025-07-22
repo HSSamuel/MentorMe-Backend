@@ -1,9 +1,11 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAllMyGoals = exports.deleteGoal = exports.updateGoal = exports.createGoal = exports.getGoalsForMentorship = void 0;
-const client_1 = require("@prisma/client");
 const getUserId_1 = require("../utils/getUserId");
-const prisma = new client_1.PrismaClient();
+const client_1 = __importDefault(require("../client"));
 // GET goals for a specific mentorship
 const getGoalsForMentorship = async (req, res) => {
     const userId = (0, getUserId_1.getUserId)(req);
@@ -14,7 +16,7 @@ const getGoalsForMentorship = async (req, res) => {
         return;
     }
     try {
-        const mentorship = await prisma.mentorshipRequest.findFirst({
+        const mentorship = await client_1.default.mentorshipRequest.findFirst({
             where: {
                 id: id, // Use standardized 'id'
                 OR: [{ menteeId: userId }, { mentorId: userId }],
@@ -26,7 +28,7 @@ const getGoalsForMentorship = async (req, res) => {
                 .json({ message: "Mentorship not found or access denied." });
             return;
         }
-        const goals = await prisma.goal.findMany({
+        const goals = await client_1.default.goal.findMany({
             where: { mentorshipRequestId: id }, // Use standardized 'id'
             orderBy: { createdAt: "asc" },
         });
@@ -46,7 +48,7 @@ const createGoal = async (req, res) => {
         return;
     }
     try {
-        const mentorship = await prisma.mentorshipRequest.findFirst({
+        const mentorship = await client_1.default.mentorshipRequest.findFirst({
             where: {
                 id: mentorshipRequestId,
                 menteeId: userId,
@@ -58,7 +60,7 @@ const createGoal = async (req, res) => {
                 .json({ message: "Mentorship not found or you are not the mentee." });
             return;
         }
-        const newGoal = await prisma.goal.create({
+        const newGoal = await client_1.default.goal.create({
             data: {
                 title,
                 description: description || "",
@@ -96,7 +98,7 @@ const updateGoal = async (req, res) => {
         return;
     }
     try {
-        const goal = await prisma.goal.findFirst({
+        const goal = await client_1.default.goal.findFirst({
             where: {
                 id: id, // Use standardized 'id'
                 mentorshipRequest: {
@@ -118,7 +120,7 @@ const updateGoal = async (req, res) => {
             dataToUpdate.description = description;
         if (status !== undefined)
             dataToUpdate.status = status;
-        const updatedGoal = await prisma.goal.update({
+        const updatedGoal = await client_1.default.goal.update({
             where: { id: id },
             data: dataToUpdate,
         });
@@ -148,7 +150,7 @@ const deleteGoal = async (req, res) => {
         return;
     }
     try {
-        const goal = await prisma.goal.findFirst({
+        const goal = await client_1.default.goal.findFirst({
             where: {
                 id: id, // Use standardized 'id'
                 mentorshipRequest: {
@@ -162,7 +164,7 @@ const deleteGoal = async (req, res) => {
             });
             return;
         }
-        await prisma.goal.delete({
+        await client_1.default.goal.delete({
             where: { id: id },
         });
         res.status(204).send();
@@ -181,7 +183,7 @@ const getAllMyGoals = async (req, res) => {
         return;
     }
     try {
-        const goals = await prisma.goal.findMany({
+        const goals = await client_1.default.goal.findMany({
             where: {
                 mentorshipRequest: {
                     menteeId: userId,

@@ -1,9 +1,11 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createMessage = exports.getMessagesForConversation = exports.getConversations = void 0;
-const client_1 = require("@prisma/client");
 const getUserId_1 = require("../utils/getUserId");
-const prisma = new client_1.PrismaClient();
+const client_1 = __importDefault(require("../client"));
 // GET all conversations for the logged-in user
 const getConversations = async (req, res) => {
     const userId = (0, getUserId_1.getUserId)(req);
@@ -12,7 +14,7 @@ const getConversations = async (req, res) => {
         return;
     }
     try {
-        const conversations = await prisma.conversation.findMany({
+        const conversations = await client_1.default.conversation.findMany({
             where: {
                 participants: {
                     some: {
@@ -62,7 +64,7 @@ const getMessagesForConversation = async (req, res) => {
     }
     try {
         // FIX: First, verify the user is actually part of the conversation.
-        const conversation = await prisma.conversation.findFirst({
+        const conversation = await client_1.default.conversation.findFirst({
             where: {
                 id: conversationId,
                 participants: {
@@ -79,7 +81,7 @@ const getMessagesForConversation = async (req, res) => {
             return;
         }
         // If authorized, fetch all messages.
-        const messages = await prisma.message.findMany({
+        const messages = await client_1.default.message.findMany({
             where: { conversationId },
             orderBy: { createdAt: "asc" },
             include: {
@@ -116,8 +118,8 @@ const createMessage = async (req, res) => {
     try {
         // FIX: Use a database transaction to ensure creating the message and updating the
         // conversation timestamp happen together.
-        const [newMessage, updatedConversation] = await prisma.$transaction([
-            prisma.message.create({
+        const [newMessage, updatedConversation] = await client_1.default.$transaction([
+            client_1.default.message.create({
                 data: {
                     content,
                     senderId: userId,
@@ -132,7 +134,7 @@ const createMessage = async (req, res) => {
                     },
                 },
             }),
-            prisma.conversation.update({
+            client_1.default.conversation.update({
                 where: { id: conversationId },
                 data: { updatedAt: new Date() },
                 include: { participants: true },

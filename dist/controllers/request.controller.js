@@ -1,9 +1,15 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateRequestStatus = exports.getReceivedRequests = exports.getSentRequests = exports.createRequest = exports.getRequestStatusWithMentor = void 0;
-const client_1 = require("@prisma/client");
 const gamification_service_1 = require("../services/gamification.service");
-const prisma = new client_1.PrismaClient();
+const client_1 = __importDefault(require("../client"));
+const stream_chat_1 = require("stream-chat");
+// --- [FIX 3] Initialize the Stream Chat server client ---
+// Ensure your .env file has STREAM_API_KEY and STREAM_API_SECRET
+const streamClient = stream_chat_1.StreamChat.getInstance(process.env.STREAM_API_KEY, process.env.STREAM_API_SECRET);
 const getUserIdForRequest = (req) => {
     if (!req.user)
         return null;
@@ -13,8 +19,6 @@ const getUserIdForRequest = (req) => {
         return req.user.id;
     return null;
 };
-// [... existing functions like createRequest, getSentRequests, etc. remain here ...]
-// FIX: Add a new function to check the status of a request with a specific mentor
 const getRequestStatusWithMentor = async (req, res) => {
     const menteeId = getUserIdForRequest(req);
     const { mentorId } = req.params;
@@ -23,7 +27,7 @@ const getRequestStatusWithMentor = async (req, res) => {
         return;
     }
     try {
-        const request = await prisma.mentorshipRequest.findFirst({
+        const request = await client_1.default.mentorshipRequest.findFirst({
             where: {
                 menteeId,
                 mentorId,
@@ -36,7 +40,6 @@ const getRequestStatusWithMentor = async (req, res) => {
             res.status(200).json({ status: request.status });
         }
         else {
-            // If no request is found, it's not an error. It just means a request hasn't been sent.
             res.status(200).json({ status: null });
         }
     }
@@ -58,7 +61,7 @@ const createRequest = async (req, res) => {
         return;
     }
     try {
-        const existingRequest = await prisma.mentorshipRequest.findFirst({
+        const existingRequest = await client_1.default.mentorshipRequest.findFirst({
             where: {
                 menteeId,
                 mentorId,
@@ -70,11 +73,11 @@ const createRequest = async (req, res) => {
                 .json({ message: "You have already sent a request to this mentor." });
             return;
         }
-        const newRequest = await prisma.mentorshipRequest.create({
+        const newRequest = await client_1.default.mentorshipRequest.create({
             data: { menteeId, mentorId, status: "PENDING" },
             include: { mentee: { include: { profile: true } } },
         });
-        await prisma.notification.create({
+        await client_1.default.notification.create({
             data: {
                 userId: mentorId,
                 type: "NEW_MENTORSHIP_REQUEST",
@@ -96,7 +99,7 @@ const getSentRequests = async (req, res) => {
         return;
     }
     try {
-        const requests = await prisma.mentorshipRequest.findMany({
+        const requests = await client_1.default.mentorshipRequest.findMany({
             where: { menteeId },
             include: {
                 mentor: {
@@ -121,7 +124,7 @@ const getReceivedRequests = async (req, res) => {
         return;
     }
     try {
-        const requests = await prisma.mentorshipRequest.findMany({
+        const requests = await client_1.default.mentorshipRequest.findMany({
             where: { mentorId },
             include: {
                 mentee: {
@@ -154,20 +157,38 @@ const updateRequestStatus = async (req, res) => {
         return;
     }
     try {
-        const request = await prisma.mentorshipRequest.findUnique({
+        const request = await client_1.default.mentorshipRequest.findUnique({
             where: { id },
-            include: { mentor: { include: { profile: true } } },
+            include: {
+                mentor: { include: { profile: true } },
+                mentee: { include: { profile: true } },
+            },
         });
         if (!request || request.mentorId !== mentorId) {
             res.status(404).json({ message: "Request not found or access denied" });
             return;
         }
-        const updatedRequest = await prisma.mentorshipRequest.update({
+        const updatedRequest = await client_1.default.mentorshipRequest.update({
             where: { id },
             data: { status: status },
         });
         if (status === "ACCEPTED") {
-            await prisma.conversation.create({
+            try {
+                const channelId = `mentorship-${request.mentorId}-${request.menteeId}`;
+                // --- [FIX] Create the data object first to bypass TypeScript's strict literal check ---
+                const channelData = {
+                    name: `Mentorship: ${request.mentor.profile?.name} & ${request.mentee.profile?.name}`,
+                    created_by_id: mentorId,
+                    members: [request.mentorId, request.menteeId],
+                };
+                const channel = streamClient.channel("messaging", channelId, channelData);
+                await channel.create();
+                console.log(`Stream channel created: ${channelId}`);
+            }
+            catch (chatError) {
+                console.error("Error creating Stream chat channel:", chatError);
+            }
+            await client_1.default.conversation.create({
                 data: {
                     participants: {
                         connect: [{ id: request.mentorId }, { id: request.menteeId }],
@@ -176,7 +197,7 @@ const updateRequestStatus = async (req, res) => {
             });
             await (0, gamification_service_1.awardPoints)(request.mentorId, 25);
             await (0, gamification_service_1.awardPoints)(request.menteeId, 10);
-            await prisma.notification.create({
+            await client_1.default.notification.create({
                 data: {
                     userId: request.menteeId,
                     type: "MENTORSHIP_REQUEST_ACCEPTED",
@@ -186,7 +207,7 @@ const updateRequestStatus = async (req, res) => {
             });
         }
         else if (status === "REJECTED") {
-            await prisma.notification.create({
+            await client_1.default.notification.create({
                 data: {
                     userId: request.menteeId,
                     type: "MENTORSHIP_REQUEST_REJECTED",

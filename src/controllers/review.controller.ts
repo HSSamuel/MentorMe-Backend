@@ -1,7 +1,5 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from "../client";
 
 const getUserId = (req: Request): string | null => {
   if (!req.user || !("userId" in req.user)) return null;

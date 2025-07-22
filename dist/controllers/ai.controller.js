@@ -1,8 +1,11 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.summarizeTranscript = exports.getAiMentorMatches = exports.deleteAIConversation = exports.handleFileAnalysis = exports.handleCohereChat = exports.handleAIChat = exports.getAIMessages = exports.getAIConversations = void 0;
 const generative_ai_1 = require("@google/generative-ai");
-const client_1 = require("@prisma/client");
+const client_1 = __importDefault(require("../client"));
 const cohere_ai_1 = require("cohere-ai");
 const getUserId_1 = require("../utils/getUserId");
 const ai_service_1 = require("../services/ai.service");
@@ -11,7 +14,6 @@ if (!process.env.GEMINI_API_KEY || !process.env.COHERE_API_KEY) {
     console.error("🔴 AI API keys are not set in environment variables.");
     throw new Error("AI API keys are not set.");
 }
-const prisma = new client_1.PrismaClient();
 const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const cohere = new cohere_ai_1.CohereClient({
     token: process.env.COHERE_API_KEY,
@@ -19,8 +21,8 @@ const cohere = new cohere_ai_1.CohereClient({
 // --- HELPER FUNCTION TO GET USER CONTEXT ---
 const getUserContext = async (userId) => {
     try {
-        const [mentorships, sessions] = await prisma.$transaction([
-            prisma.mentorshipRequest.findMany({
+        const [mentorships, sessions] = await client_1.default.$transaction([
+            client_1.default.mentorshipRequest.findMany({
                 where: {
                     OR: [{ menteeId: userId }, { mentorId: userId }],
                     status: "ACCEPTED",
@@ -38,7 +40,7 @@ const getUserContext = async (userId) => {
                     },
                 },
             }),
-            prisma.session.findMany({
+            client_1.default.session.findMany({
                 where: {
                     OR: [{ menteeId: userId }, { mentorId: userId }],
                     date: { gte: new Date() },
@@ -95,7 +97,7 @@ const getAIConversations = async (req, res) => {
         return;
     }
     try {
-        const conversations = await prisma.aIConversation.findMany({
+        const conversations = await client_1.default.aIConversation.findMany({
             where: { userId },
             orderBy: { updatedAt: "desc" },
             include: { _count: { select: { messages: true } } },
@@ -124,7 +126,7 @@ const getAIMessages = async (req, res) => {
         return;
     }
     try {
-        const messages = await prisma.aIMessage.findMany({
+        const messages = await client_1.default.aIMessage.findMany({
             where: {
                 conversationId: conversationId,
                 conversation: { userId },
@@ -177,19 +179,19 @@ Your original S.M.A.R.T. goal instruction remains: When a user expresses a desir
         let isNewConversation = false;
         if (!currentConversationId) {
             isNewConversation = true;
-            const newConversation = await prisma.aIConversation.create({
+            const newConversation = await client_1.default.aIConversation.create({
                 data: { userId, title: message.substring(0, 40) },
             });
             currentConversationId = newConversation.id;
         }
-        await prisma.aIMessage.create({
+        await client_1.default.aIMessage.create({
             data: {
                 conversationId: currentConversationId,
                 content: message,
                 sender: "USER",
             },
         });
-        const pastMessages = await prisma.aIMessage.findMany({
+        const pastMessages = await client_1.default.aIMessage.findMany({
             where: { conversationId: currentConversationId },
             orderBy: { createdAt: "asc" },
         });
@@ -222,7 +224,7 @@ Your original S.M.A.R.T. goal instruction remains: When a user expresses a desir
             });
             aiResponseText = response.text;
         }
-        const aiMessage = await prisma.aIMessage.create({
+        const aiMessage = await client_1.default.aIMessage.create({
             data: {
                 conversationId: currentConversationId,
                 content: aiResponseText,
@@ -263,7 +265,7 @@ const handleFileAnalysis = async (req, res) => {
     try {
         let currentConversationId = conversationId;
         if (!currentConversationId) {
-            const newConversation = await prisma.aIConversation.create({
+            const newConversation = await client_1.default.aIConversation.create({
                 data: { userId, title: `File Analysis: ${req.file.originalname}` },
             });
             currentConversationId = newConversation.id;
@@ -288,7 +290,7 @@ const handleFileAnalysis = async (req, res) => {
         }
         const result = await model.generateContent([finalPrompt, filePart]);
         const aiResponseText = result.response.text();
-        const aiMessage = await prisma.aIMessage.create({
+        const aiMessage = await client_1.default.aIMessage.create({
             data: {
                 conversationId: currentConversationId,
                 content: aiResponseText,
@@ -316,7 +318,7 @@ const deleteAIConversation = async (req, res) => {
         return;
     }
     try {
-        const conversation = await prisma.aIConversation.findFirst({
+        const conversation = await client_1.default.aIConversation.findFirst({
             where: { id: conversationId, userId: userId },
         });
         if (!conversation) {
@@ -325,11 +327,11 @@ const deleteAIConversation = async (req, res) => {
             });
             return;
         }
-        await prisma.$transaction([
-            prisma.aIMessage.deleteMany({
+        await client_1.default.$transaction([
+            client_1.default.aIMessage.deleteMany({
                 where: { conversationId: conversationId },
             }),
-            prisma.aIConversation.delete({
+            client_1.default.aIConversation.delete({
                 where: { id: conversationId },
             }),
         ]);
@@ -359,7 +361,6 @@ const getAiMentorMatches = async (req, res) => {
         res.status(200).json(topMentors);
     }
     catch (error) {
-        console.error("Error getting AI mentor matches:", error);
         res.status(500).json({ message: "Failed to retrieve mentor matches." });
     }
 };
@@ -380,7 +381,7 @@ const summarizeTranscript = async (req, res) => {
     }
     try {
         // 1. Verify the user is a participant of the session
-        const session = await prisma.session.findFirst({
+        const session = await client_1.default.session.findFirst({
             where: {
                 id: sessionId,
                 OR: [{ menteeId: userId }, { mentorId: userId }],
@@ -421,7 +422,7 @@ const summarizeTranscript = async (req, res) => {
                 .filter(Boolean)
             : [];
         // 5. Save the insights to the database
-        const insight = await prisma.sessionInsight.upsert({
+        const insight = await client_1.default.sessionInsight.upsert({
             where: { sessionId },
             update: { summary, actionItems },
             create: { sessionId, summary, actionItems },

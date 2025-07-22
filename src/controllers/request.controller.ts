@@ -1,8 +1,15 @@
 import { Request, Response } from "express";
-import { PrismaClient, RequestStatus } from "@prisma/client";
+import { RequestStatus } from "@prisma/client";
 import { awardPoints } from "../services/gamification.service";
+import prisma from "../client";
+import { StreamChat } from "stream-chat";
 
-const prisma = new PrismaClient();
+// --- [FIX 3] Initialize the Stream Chat server client ---
+// Ensure your .env file has STREAM_API_KEY and STREAM_API_SECRET
+const streamClient = StreamChat.getInstance(
+  process.env.STREAM_API_KEY!,
+  process.env.STREAM_API_SECRET!
+);
 
 const getUserIdForRequest = (req: Request): string | null => {
   if (!req.user) return null;
@@ -11,9 +18,6 @@ const getUserIdForRequest = (req: Request): string | null => {
   return null;
 };
 
-// [... existing functions like createRequest, getSentRequests, etc. remain here ...]
-
-// FIX: Add a new function to check the status of a request with a specific mentor
 export const getRequestStatusWithMentor = async (
   req: Request,
   res: Response
@@ -40,7 +44,6 @@ export const getRequestStatusWithMentor = async (
     if (request) {
       res.status(200).json({ status: request.status });
     } else {
-      // If no request is found, it's not an error. It just means a request hasn't been sent.
       res.status(200).json({ status: null });
     }
   } catch (error) {
@@ -174,7 +177,10 @@ export const updateRequestStatus = async (
   try {
     const request = await prisma.mentorshipRequest.findUnique({
       where: { id },
-      include: { mentor: { include: { profile: true } } },
+      include: {
+        mentor: { include: { profile: true } },
+        mentee: { include: { profile: true } },
+      },
     });
     if (!request || request.mentorId !== mentorId) {
       res.status(404).json({ message: "Request not found or access denied" });
@@ -186,6 +192,28 @@ export const updateRequestStatus = async (
     });
 
     if (status === "ACCEPTED") {
+      try {
+        const channelId = `mentorship-${request.mentorId}-${request.menteeId}`;
+
+        // --- [FIX] Create the data object first to bypass TypeScript's strict literal check ---
+        const channelData = {
+          name: `Mentorship: ${request.mentor.profile?.name} & ${request.mentee.profile?.name}`,
+          created_by_id: mentorId,
+          members: [request.mentorId, request.menteeId],
+        };
+
+        const channel = streamClient.channel(
+          "messaging",
+          channelId,
+          channelData
+        );
+
+        await channel.create();
+        console.log(`Stream channel created: ${channelId}`);
+      } catch (chatError) {
+        console.error("Error creating Stream chat channel:", chatError);
+      }
+
       await prisma.conversation.create({
         data: {
           participants: {

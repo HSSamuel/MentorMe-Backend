@@ -3,17 +3,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSessionInsights = exports.createSessionInsights = exports.notifyMentorOfCall = exports.generateVideoCallToken = exports.submitFeedback = exports.getMenteeSessions = exports.getMentorSessions = exports.createSession = exports.setAvailability = exports.getMentorAvailability = exports.getAvailability = void 0;
-const client_1 = require("@prisma/client");
+exports.getSessionDetails = exports.getSessionInsights = exports.createSessionInsights = exports.notifyMentorOfCall = exports.generateVideoCallToken = exports.submitFeedback = exports.getMenteeSessions = exports.getMentorSessions = exports.createSession = exports.setAvailability = exports.getMentorAvailability = exports.getAvailability = void 0;
 const calendar_service_1 = require("../services/calendar.service");
 const getUserId_1 = require("../utils/getUserId");
 const gamification_service_1 = require("../services/gamification.service");
 const twilio_1 = __importDefault(require("twilio"));
+const client_1 = __importDefault(require("../client"));
 // --- AI Client Imports and Initialization ---
 const generative_ai_1 = require("@google/generative-ai");
 const cohere_ai_1 = require("cohere-ai");
-const prisma = new client_1.PrismaClient();
-// --- [NEW] Twilio Initialization ---
+// --- Twilio Initialization ---
 const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
 const twilioApiKeySid = process.env.TWILIO_API_KEY_SID;
 const twilioApiKeySecret = process.env.TWILIO_API_KEY_SECRET;
@@ -45,7 +44,7 @@ const getAvailability = async (req, res) => {
         return;
     }
     try {
-        const availability = await prisma.availability.findMany({
+        const availability = await client_1.default.availability.findMany({
             where: { mentorId },
         });
         res.status(200).json(availability);
@@ -58,10 +57,10 @@ exports.getAvailability = getAvailability;
 const getMentorAvailability = async (req, res) => {
     const { mentorId } = req.params;
     try {
-        const weeklyAvailability = await prisma.availability.findMany({
+        const weeklyAvailability = await client_1.default.availability.findMany({
             where: { mentorId },
         });
-        const bookedSessions = await prisma.session.findMany({
+        const bookedSessions = await client_1.default.session.findMany({
             where: {
                 mentorId,
                 date: { gte: new Date() },
@@ -117,6 +116,7 @@ const getMentorAvailability = async (req, res) => {
 exports.getMentorAvailability = getMentorAvailability;
 const setAvailability = async (req, res) => {
     const mentorId = (0, getUserId_1.getUserId)(req);
+    // This line retrieves the Socket.IO instance that was attached to the app in `index.ts`.
     const io = req.app.locals.io;
     if (!mentorId) {
         res.status(401).json({ message: "Authentication error" });
@@ -124,7 +124,7 @@ const setAvailability = async (req, res) => {
     }
     const { availability } = req.body;
     try {
-        await prisma.availability.deleteMany({ where: { mentorId } });
+        await client_1.default.availability.deleteMany({ where: { mentorId } });
         const availabilityData = availability.map((slot) => ({
             mentorId,
             day: slot.day,
@@ -132,9 +132,16 @@ const setAvailability = async (req, res) => {
             endTime: slot.endTime,
         }));
         if (availabilityData.length > 0) {
-            await prisma.availability.createMany({ data: availabilityData });
+            await client_1.default.availability.createMany({ data: availabilityData });
         }
-        io.emit("availabilityUpdated", { mentorId });
+        // --- [ADDED] Safety check to prevent crashing if the io object is not available ---
+        if (io) {
+            // This emits a real-time event to all connected clients.
+            io.emit("availabilityUpdated", { mentorId });
+        }
+        else {
+            console.warn("Socket.IO not initialized, skipping emit event.");
+        }
         res.status(200).json({ message: "Availability updated successfully." });
     }
     catch (error) {
@@ -151,7 +158,7 @@ const createSession = async (req, res) => {
     }
     const { mentorId, sessionTime } = req.body;
     try {
-        const match = await prisma.mentorshipRequest.findFirst({
+        const match = await client_1.default.mentorshipRequest.findFirst({
             where: { menteeId, mentorId, status: "ACCEPTED" },
         });
         if (!match) {
@@ -160,14 +167,14 @@ const createSession = async (req, res) => {
                 .json({ message: "You are not matched with this mentor." });
             return;
         }
-        const newSession = await prisma.session.create({
+        const newSession = await client_1.default.session.create({
             data: { menteeId, mentorId, date: new Date(sessionTime) },
         });
-        const mentee = await prisma.user.findUnique({
+        const mentee = await client_1.default.user.findUnique({
             where: { id: menteeId },
             include: { profile: true },
         });
-        await prisma.notification.create({
+        await client_1.default.notification.create({
             data: {
                 userId: mentorId,
                 type: "SESSION_BOOKED",
@@ -176,7 +183,7 @@ const createSession = async (req, res) => {
             },
         });
         try {
-            const mentor = await prisma.user.findUnique({ where: { id: mentorId } });
+            const mentor = await client_1.default.user.findUnique({ where: { id: mentorId } });
             if (mentor && mentee) {
                 const eventDetails = {
                     summary: `Mentorship Session: ${mentor.email} & ${mentee.email}`,
@@ -208,7 +215,7 @@ const getMentorSessions = async (req, res) => {
         return;
     }
     try {
-        const sessions = await prisma.session.findMany({
+        const sessions = await client_1.default.session.findMany({
             where: { mentorId },
             include: { mentee: { include: { profile: true } } },
             orderBy: { date: "asc" },
@@ -227,7 +234,7 @@ const getMenteeSessions = async (req, res) => {
         return;
     }
     try {
-        const sessions = await prisma.session.findMany({
+        const sessions = await client_1.default.session.findMany({
             where: { menteeId },
             include: { mentor: { include: { profile: true } } },
             orderBy: { date: "asc" },
@@ -249,7 +256,7 @@ const submitFeedback = async (req, res) => {
         return;
     }
     try {
-        const session = await prisma.session.findUnique({ where: { id } });
+        const session = await client_1.default.session.findUnique({ where: { id } });
         if (!session ||
             (session.mentorId !== userId && session.menteeId !== userId)) {
             res
@@ -262,7 +269,7 @@ const submitFeedback = async (req, res) => {
             dataToUpdate.rating = rating;
         if (comment)
             dataToUpdate.feedback = comment;
-        const updatedSession = await prisma.session.update({
+        const updatedSession = await client_1.default.session.update({
             where: { id },
             data: dataToUpdate,
         });
@@ -274,7 +281,6 @@ const submitFeedback = async (req, res) => {
     }
 };
 exports.submitFeedback = submitFeedback;
-// --- [MODIFIED] generateVideoCallToken now uses Twilio ---
 const generateVideoCallToken = async (req, res) => {
     const userId = (0, getUserId_1.getUserId)(req);
     const { sessionId } = req.params;
@@ -287,7 +293,7 @@ const generateVideoCallToken = async (req, res) => {
         return;
     }
     try {
-        const session = await prisma.session.findFirst({
+        const session = await client_1.default.session.findFirst({
             where: {
                 id: sessionId,
                 OR: [{ menteeId: userId }, { mentorId: userId }],
@@ -322,7 +328,7 @@ const notifyMentorOfCall = async (req, res) => {
         return;
     }
     try {
-        const session = await prisma.session.findUnique({
+        const session = await client_1.default.session.findUnique({
             where: { id: sessionId },
             include: {
                 mentee: { include: { profile: true } },
@@ -336,7 +342,7 @@ const notifyMentorOfCall = async (req, res) => {
         }
         const { mentorId } = session;
         const menteeName = session.mentee.profile?.name || "Your mentee";
-        const notification = await prisma.notification.create({
+        const notification = await client_1.default.notification.create({
             data: {
                 userId: mentorId,
                 type: "VIDEO_CALL_INITIATED",
@@ -346,7 +352,13 @@ const notifyMentorOfCall = async (req, res) => {
             },
         });
         const io = req.app.locals.io;
-        io.to(mentorId).emit("newNotification", notification);
+        // --- [ADDED] Safety check for the io object ---
+        if (io) {
+            io.to(mentorId).emit("newNotification", notification);
+        }
+        else {
+            console.warn("Socket.IO not initialized, skipping notification emit.");
+        }
         console.log(`Notification sent to mentor ${mentorId} for video call.`);
         res.status(200).json({ message: "Notification sent successfully." });
     }
@@ -373,7 +385,7 @@ const createSessionInsights = async (req, res) => {
         return;
     }
     try {
-        const session = await prisma.session.findFirst({
+        const session = await client_1.default.session.findFirst({
             where: {
                 id: sessionId,
                 OR: [{ menteeId: userId }, { mentorId: userId }],
@@ -402,7 +414,7 @@ const createSessionInsights = async (req, res) => {
                 .split(/\d+\.\s+/)
                 .map((item) => item.trim())
                 .filter((item) => item.length > 0);
-        const savedInsight = await prisma.sessionInsight.upsert({
+        const savedInsight = await client_1.default.sessionInsight.upsert({
             where: { sessionId },
             update: { summary, actionItems },
             create: { sessionId, summary, actionItems },
@@ -423,7 +435,7 @@ const getSessionInsights = async (req, res) => {
         return;
     }
     try {
-        const session = await prisma.session.findFirst({
+        const session = await client_1.default.session.findFirst({
             where: {
                 id: sessionId,
                 OR: [{ menteeId: userId }, { mentorId: userId }],
@@ -435,13 +447,11 @@ const getSessionInsights = async (req, res) => {
                 .json({ message: "You are not authorized to view these insights." });
             return;
         }
-        const insights = await prisma.sessionInsight.findUnique({
+        const insights = await client_1.default.sessionInsight.findUnique({
             where: { sessionId },
         });
         if (!insights) {
-            res
-                .status(404)
-                .json({
+            res.status(404).json({
                 message: "No insights have been generated for this session yet.",
             });
             return;
@@ -454,3 +464,27 @@ const getSessionInsights = async (req, res) => {
     }
 };
 exports.getSessionInsights = getSessionInsights;
+const getSessionDetails = async (req, res) => {
+    const { sessionId } = req.params;
+    const userId = (0, getUserId_1.getUserId)(req);
+    try {
+        const session = await client_1.default.session.findUnique({
+            where: { id: sessionId },
+            include: {
+                mentor: { include: { profile: true } },
+                mentee: { include: { profile: true } },
+            },
+        });
+        if (!session ||
+            (session.mentorId !== userId && session.menteeId !== userId)) {
+            res.status(404).json({ message: "Session not found or access denied." });
+            return;
+        }
+        res.status(200).json(session);
+    }
+    catch (error) {
+        console.error("Error fetching session details:", error);
+        res.status(500).json({ message: "Error fetching session details." });
+    }
+};
+exports.getSessionDetails = getSessionDetails;

@@ -49,4 +49,6 @@ router.post("/:sessionId/insights", auth_middleware_1.authMiddleware, [
 ], validateRequest_1.validateRequest, session_controller_1.createSessionInsights);
 // GET: Any authenticated participant can retrieve the insights for a session
 router.get("/:sessionId/insights", auth_middleware_1.authMiddleware, [(0, express_validator_1.param)("sessionId").isMongoId().withMessage("Invalid session ID")], validateRequest_1.validateRequest, session_controller_1.getSessionInsights);
+// --- Route to get details of a single session ---
+router.get("/:sessionId", auth_middleware_1.authMiddleware, [(0, express_validator_1.param)("sessionId").isMongoId().withMessage("Invalid session ID")], validateRequest_1.validateRequest, session_controller_1.getSessionDetails);
 exports.default = router;

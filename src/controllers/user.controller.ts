@@ -1,9 +1,7 @@
 import { Request, Response, NextFunction } from "express";
-import { PrismaClient } from "@prisma/client";
+import prisma from "../client";
 import { getUserId } from "../utils/getUserId";
 import { generateEmbedding } from "../services/ai.service";
-
-const prisma = new PrismaClient();
 
 export const getMyProfile = async (
   req: Request,

@@ -1,20 +1,22 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.seedLevels = exports.awardPoints = void 0;
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
+const client_1 = __importDefault(require("../client"));
 const awardPoints = async (userId, points) => {
-    const user = await prisma.user.update({
+    const user = await client_1.default.user.update({
         where: { id: userId },
         data: { points: { increment: points } },
         include: { level: true },
     });
-    const nextLevel = await prisma.level.findFirst({
+    const nextLevel = await client_1.default.level.findFirst({
         where: { minPoints: { gt: user.level?.minPoints || 0 } },
         orderBy: { minPoints: "asc" },
     });
     if (nextLevel && user.points >= nextLevel.minPoints) {
-        await prisma.user.update({
+        await client_1.default.user.update({
             where: { id: userId },
             data: { levelId: nextLevel.id },
         });
@@ -23,9 +25,9 @@ const awardPoints = async (userId, points) => {
 exports.awardPoints = awardPoints;
 // Seed initial levels
 const seedLevels = async () => {
-    const existingLevels = await prisma.level.count();
+    const existingLevels = await client_1.default.level.count();
     if (existingLevels === 0) {
-        await prisma.level.createMany({
+        await client_1.default.level.createMany({
             data: [
                 { name: "Beginner", minPoints: 0 },
                 { name: "Intermediate", minPoints: 100 },

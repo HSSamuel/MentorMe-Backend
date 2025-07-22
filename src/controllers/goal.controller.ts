@@ -1,8 +1,6 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
 import { getUserId } from "../utils/getUserId";
-
-const prisma = new PrismaClient();
+import prisma from "../client";
 
 // GET goals for a specific mentorship
 export const getGoalsForMentorship = async (

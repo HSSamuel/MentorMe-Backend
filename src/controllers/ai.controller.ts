@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { GoogleGenerativeAI, Part } from "@google/generative-ai";
-import { Prisma, PrismaClient } from "@prisma/client";
+import prisma from "../client";
 import { CohereClient, Cohere } from "cohere-ai";
 import { getUserId } from "../utils/getUserId";
 import { findTopMentorMatches } from "../services/ai.service";
@@ -11,7 +11,6 @@ if (!process.env.GEMINI_API_KEY || !process.env.COHERE_API_KEY) {
   console.error("🔴 AI API keys are not set in environment variables.");
   throw new Error("AI API keys are not set.");
 }
-const prisma = new PrismaClient();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 const cohere = new CohereClient({
   token: process.env.COHERE_API_KEY as string,
@@ -430,7 +429,6 @@ export const getAiMentorMatches = async (
 
     res.status(200).json(topMentors);
   } catch (error) {
-    console.error("Error getting AI mentor matches:", error);
     res.status(500).json({ message: "Failed to retrieve mentor matches." });
   }
 };

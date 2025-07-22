@@ -1,27 +1,30 @@
 import { Request, Response } from "express";
-import { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import zxcvbn from "zxcvbn";
 import crypto from "crypto";
 import { sendPasswordResetEmail } from "../services/email.service";
 import config from "../config";
+import prisma from "../client";
+import { StreamChat } from "stream-chat";
 
-const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
 
-// Helper function to safely get userId from either JWT payload or Passport user object
+const streamClient = StreamChat.getInstance(
+  process.env.STREAM_API_KEY!,
+  process.env.STREAM_API_SECRET!
+);
+
 const getUserId = (req: Request): string | null => {
   if (!req.user) return null;
-  if ("userId" in req.user) return req.user.userId as string; // From JWT
-  if ("id" in req.user) return req.user.id as string; // From Passport/Prisma
+  if ("userId" in req.user) return req.user.userId as string;
+  if ("id" in req.user) return req.user.id as string;
   return null;
 };
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   const { email, password, role } = req.body;
 
-  // --- FIX: Check if a user with this email already exists ---
   try {
     const existingUser = await prisma.user.findUnique({
       where: { email },
@@ -29,7 +32,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     if (existingUser) {
       res
-        .status(409) // 409 Conflict is a more appropriate status code
+        .status(409)
         .json({ message: "A user with this email address already exists." });
       return;
     }
@@ -45,7 +48,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create both the user and their profile in a single transaction
     const user = await prisma.user.create({
       data: {
         email,
@@ -53,19 +55,33 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         role,
         profile: {
           create: {
-            name: email.split("@")[0], // Use the part of the email before the @ as a default name
+            name: email.split("@")[0],
           },
         },
       },
       include: {
-        profile: true, // Include the new profile in the response
+        profile: true,
       },
     });
+
+    try {
+      await streamClient.upsertUser({
+        id: user.id,
+        name: user.profile?.name || user.email.split("@")[0],
+        role: user.role.toLowerCase(),
+        image: `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          user.profile?.name || user.email
+        )}&background=random&color=fff`,
+      });
+      console.log(`User ${user.id} created successfully in Stream Chat.`);
+    } catch (chatError) {
+      console.error("Error creating user in Stream Chat:", chatError);
+    }
 
     const { password: _, ...userWithoutPassword } = user;
     res.status(201).json(userWithoutPassword);
   } catch (error) {
-    console.error("Registration Error:", error); // Log the actual error to the console
+    console.error("Registration Error:", error);
     res.status(500).json({ message: "Server error during registration" });
   }
 };
@@ -73,7 +89,11 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 export const login = async (req: Request, res: Response): Promise<void> => {
   const { email, password } = req.body;
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
+    // --- [MODIFIED] Include the user's profile in the query ---
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { profile: true },
+    });
 
     if (
       !user ||
@@ -83,6 +103,26 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       res.status(401).json({ message: "Invalid credentials" });
       return;
     }
+
+    // --- [ADDED] Sync user to Stream Chat on every login ---
+    // This ensures all existing users are created in Stream.
+    try {
+      await streamClient.upsertUser({
+        id: user.id,
+        name: user.profile?.name || user.email.split("@")[0],
+        role: user.role.toLowerCase(),
+        image:
+          user.profile?.avatarUrl ||
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(user.profile?.name || user.email)}&background=random&color=fff`,
+      });
+      console.log(`User ${user.id} synced to Stream Chat on login.`);
+    } catch (chatError) {
+      console.error(
+        "Error syncing user to Stream Chat during login:",
+        chatError
+      );
+    }
+    // --- End of Stream Chat user sync ---
 
     const token = jwt.sign(
       { userId: user.id, role: user.role, email: user.email },
@@ -142,7 +182,7 @@ export const forgotPassword = async (
       .update(resetToken)
       .digest("hex");
 
-    const passwordResetExpires = new Date(Date.now() + 10 * 60 * 1000); // Token expires in 10 minutes
+    const passwordResetExpires = new Date(Date.now() + 10 * 60 * 1000);
 
     await prisma.user.update({
       where: { email },

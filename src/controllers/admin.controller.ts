@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
-import { PrismaClient, Role } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { Role } from "@prisma/client";
+import prisma from "../client";
 
 // Ensure this function is exported
 export const getAllMatches = async (

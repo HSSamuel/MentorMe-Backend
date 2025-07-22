@@ -1,9 +1,11 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createCalendarEvent = exports.getTokensFromCode = exports.generateAuthUrl = void 0;
 const googleapis_1 = require("googleapis");
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
+const client_1 = __importDefault(require("../client"));
 // Initialize the Google OAuth2 client
 const oauth2Client = new googleapis_1.google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, `${process.env.BACKEND_URL}/api/calendar/google/callback` // This must exactly match the URI in your Google Cloud Console
 );
@@ -32,7 +34,7 @@ exports.getTokensFromCode = getTokensFromCode;
  * Creates a new event in the user's Google Calendar.
  */
 const createCalendarEvent = async (userId, eventDetails) => {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await client_1.default.user.findUnique({ where: { id: userId } });
     if (!user || !user.googleAccessToken || !user.googleRefreshToken) {
         throw new Error("User is not authenticated with Google Calendar.");
     }

@@ -1,9 +1,11 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.googleAuthCallback = exports.googleAuth = void 0;
 const calendar_service_1 = require("../services/calendar.service");
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
+const client_1 = __importDefault(require("../client"));
 const getUserId = (req) => {
     if (!req.user || !("userId" in req.user))
         return null;
@@ -37,7 +39,7 @@ const googleAuthCallback = async (req, res) => {
     try {
         const tokens = await (0, calendar_service_1.getTokensFromCode)(code);
         // Securely store the tokens in the database for the user
-        await prisma.user.update({
+        await client_1.default.user.update({
             where: { id: userId },
             data: {
                 googleAccessToken: tokens.access_token,

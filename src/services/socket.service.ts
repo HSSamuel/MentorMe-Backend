@@ -1,9 +1,8 @@
 import { Server as SocketIOServer, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
-import { PrismaClient } from "@prisma/client";
+import prisma from "../client";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
-const prisma = new PrismaClient();
 
 // A map to track user sockets and online status globally
 const userSockets = new Map<string, string>(); // Map<userId, socketId>

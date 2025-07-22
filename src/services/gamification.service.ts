@@ -1,6 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from "../client";
 
 export const awardPoints = async (userId: string, points: number) => {
   const user = await prisma.user.update({

@@ -1,8 +1,6 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
 import { getUserId } from "../utils/getUserId";
-
-const prisma = new PrismaClient();
+import prisma from "../client";
 
 // GET all conversations for the logged-in user
 export const getConversations = async (

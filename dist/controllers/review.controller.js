@@ -1,8 +1,10 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getReviewsForMentor = exports.createReview = void 0;
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
+const client_1 = __importDefault(require("../client"));
 const getUserId = (req) => {
     if (!req.user || !("userId" in req.user))
         return null;
@@ -19,7 +21,7 @@ const createReview = async (req, res) => {
     }
     try {
         // Verify that the user is the mentee of this specific mentorship request
-        const mentorship = await prisma.mentorshipRequest.findFirst({
+        const mentorship = await client_1.default.mentorshipRequest.findFirst({
             where: {
                 id: mentorshipRequestId,
                 menteeId: userId,
@@ -34,7 +36,7 @@ const createReview = async (req, res) => {
             return;
         }
         // Check if a review for this mentorship already exists
-        const existingReview = await prisma.review.findFirst({
+        const existingReview = await client_1.default.review.findFirst({
             where: { mentorshipRequestId },
         });
         if (existingReview) {
@@ -44,7 +46,7 @@ const createReview = async (req, res) => {
                 .json({ message: "A review for this mentorship already exists." });
             return;
         }
-        const newReview = await prisma.review.create({
+        const newReview = await client_1.default.review.create({
             data: {
                 mentorshipRequestId,
                 rating,
@@ -63,7 +65,7 @@ exports.createReview = createReview;
 const getReviewsForMentor = async (req, res) => {
     const { mentorId } = req.params;
     try {
-        const reviews = await prisma.review.findMany({
+        const reviews = await client_1.default.review.findMany({
             where: {
                 mentorshipRequest: {
                     mentorId: mentorId,

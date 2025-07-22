@@ -10,7 +10,8 @@ import {
   generateVideoCallToken,
   notifyMentorOfCall,
   createSessionInsights,
-  getSessionInsights, // 1. Import the new controller
+  getSessionInsights,
+  getSessionDetails,
 } from "../controllers/session.controller";
 import {
   authMiddleware,
@@ -130,6 +131,15 @@ router.get(
   [param("sessionId").isMongoId().withMessage("Invalid session ID")],
   validateRequest,
   getSessionInsights
+);
+
+// --- Route to get details of a single session ---
+router.get(
+  "/:sessionId",
+  authMiddleware,
+  [param("sessionId").isMongoId().withMessage("Invalid session ID")],
+  validateRequest,
+  getSessionDetails
 );
 
 export default router;

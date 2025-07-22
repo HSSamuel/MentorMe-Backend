@@ -5,9 +5,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.initializeSocket = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const client_1 = require("@prisma/client");
+const client_1 = __importDefault(require("../client"));
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
-const prisma = new client_1.PrismaClient();
 // A map to track user sockets and online status globally
 const userSockets = new Map(); // Map<userId, socketId>
 let io;
@@ -67,8 +66,8 @@ const initializeSocket = (ioInstance) => {
         socket.on("sendMessage", async (data, callback) => {
             try {
                 const { conversationId, content, tempId } = data;
-                const [newMessage, updatedConversation] = await prisma.$transaction([
-                    prisma.message.create({
+                const [newMessage, updatedConversation] = await client_1.default.$transaction([
+                    client_1.default.message.create({
                         data: { content, senderId: userId, conversationId },
                         include: {
                             sender: {
@@ -79,7 +78,7 @@ const initializeSocket = (ioInstance) => {
                             },
                         },
                     }),
-                    prisma.conversation.update({
+                    client_1.default.conversation.update({
                         where: { id: conversationId },
                         data: { updatedAt: new Date() },
                         include: { participants: true },
@@ -114,7 +113,7 @@ const initializeSocket = (ioInstance) => {
             userSockets.delete(userId);
             const lastSeen = new Date().toISOString();
             try {
-                await prisma.user.update({
+                await client_1.default.user.update({
                     where: { id: userId },
                     data: { lastSeen },
                 });
