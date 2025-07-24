@@ -3,6 +3,7 @@ import { RequestStatus } from "@prisma/client";
 import { awardPoints } from "../services/gamification.service";
 import prisma from "../client";
 import { StreamChat } from "stream-chat";
+import { getUserId } from "../utils/getUserId";
 
 const streamClient = StreamChat.getInstance(
   process.env.STREAM_API_KEY!,
@@ -80,8 +81,17 @@ export const createRequest = async (
     }
 
     const newRequest = await prisma.mentorshipRequest.create({
-      data: { menteeId, mentorId, status: "PENDING" },
-      include: { mentee: { include: { profile: true } } },
+      data: {
+        menteeId,
+        mentorId,
+        status: "PENDING",
+        message: "Request to connect",
+      },
+      include: {
+        mentee: {
+          include: { profile: true },
+        },
+      },
     });
 
     await prisma.notification.create({
@@ -250,5 +260,66 @@ export const updateRequestStatus = async (
   } catch (error) {
     console.error("Error updating request status:", error);
     res.status(500).json({ message: "Server error while updating request" });
+  }
+};
+
+export const sendRequest = async (req: Request, res: Response) => {
+  const menteeId = getUserId(req);
+  const mentorId = req.params.mentorId;
+  const { message } = req.body; // Get the message from the request body
+
+  if (!menteeId) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+
+  // Add a check for the message
+  if (!message) {
+    return res
+      .status(400)
+      .json({ message: "A message is required to send a request." });
+  }
+
+  try {
+    // Check if a request already exists
+    const existingRequest = await prisma.mentorshipRequest.findFirst({
+      where: { menteeId, mentorId, status: "PENDING" },
+    });
+
+    if (existingRequest) {
+      return res.status(409).json({
+        message: "You already have a pending request with this mentor.",
+      });
+    }
+
+    // The 'message' field from the request body is now correctly included.
+    const newRequest = await prisma.mentorshipRequest.create({
+      data: {
+        menteeId,
+        mentorId,
+        status: "PENDING",
+        message: message, // Included the message here
+      },
+    });
+
+    // Fetch the mentee's profile separately to use in the notification.
+    const mentee = await prisma.user.findUnique({
+      where: { id: menteeId },
+      include: { profile: true },
+    });
+
+    // Create a notification for the mentor
+    await prisma.notification.create({
+      data: {
+        userId: mentorId,
+        type: "NEW_MENTORSHIP_REQUEST",
+        message: `${mentee?.profile?.name || "A new mentee"} has sent you a mentorship request.`,
+        link: "/requests",
+      },
+    });
+
+    res.status(201).json(newRequest);
+  } catch (error) {
+    console.error("Error sending mentorship request:", error);
+    res.status(500).json({ message: "Failed to send mentorship request" });
   }
 };

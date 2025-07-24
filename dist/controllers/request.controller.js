@@ -3,10 +3,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateRequestStatus = exports.getReceivedRequests = exports.getSentRequests = exports.createRequest = exports.getRequestStatusWithMentor = void 0;
+exports.sendRequest = exports.updateRequestStatus = exports.getReceivedRequests = exports.getSentRequests = exports.createRequest = exports.getRequestStatusWithMentor = void 0;
 const gamification_service_1 = require("../services/gamification.service");
 const client_1 = __importDefault(require("../client"));
 const stream_chat_1 = require("stream-chat");
+const getUserId_1 = require("../utils/getUserId");
 const streamClient = stream_chat_1.StreamChat.getInstance(process.env.STREAM_API_KEY, process.env.STREAM_API_SECRET);
 const getUserIdForRequest = (req) => {
     if (!req.user)
@@ -72,8 +73,17 @@ const createRequest = async (req, res) => {
             return;
         }
         const newRequest = await client_1.default.mentorshipRequest.create({
-            data: { menteeId, mentorId, status: "PENDING" },
-            include: { mentee: { include: { profile: true } } },
+            data: {
+                menteeId,
+                mentorId,
+                status: "PENDING",
+                message: "Request to connect",
+            },
+            include: {
+                mentee: {
+                    include: { profile: true },
+                },
+            },
         });
         await client_1.default.notification.create({
             data: {
@@ -222,3 +232,57 @@ const updateRequestStatus = async (req, res) => {
     }
 };
 exports.updateRequestStatus = updateRequestStatus;
+const sendRequest = async (req, res) => {
+    const menteeId = (0, getUserId_1.getUserId)(req);
+    const mentorId = req.params.mentorId;
+    const { message } = req.body; // Get the message from the request body
+    if (!menteeId) {
+        return res.status(401).json({ message: "Authentication required" });
+    }
+    // Add a check for the message
+    if (!message) {
+        return res
+            .status(400)
+            .json({ message: "A message is required to send a request." });
+    }
+    try {
+        // Check if a request already exists
+        const existingRequest = await client_1.default.mentorshipRequest.findFirst({
+            where: { menteeId, mentorId, status: "PENDING" },
+        });
+        if (existingRequest) {
+            return res.status(409).json({
+                message: "You already have a pending request with this mentor.",
+            });
+        }
+        // The 'message' field from the request body is now correctly included.
+        const newRequest = await client_1.default.mentorshipRequest.create({
+            data: {
+                menteeId,
+                mentorId,
+                status: "PENDING",
+                message: message, // Included the message here
+            },
+        });
+        // Fetch the mentee's profile separately to use in the notification.
+        const mentee = await client_1.default.user.findUnique({
+            where: { id: menteeId },
+            include: { profile: true },
+        });
+        // Create a notification for the mentor
+        await client_1.default.notification.create({
+            data: {
+                userId: mentorId,
+                type: "NEW_MENTORSHIP_REQUEST",
+                message: `${mentee?.profile?.name || "A new mentee"} has sent you a mentorship request.`,
+                link: "/requests",
+            },
+        });
+        res.status(201).json(newRequest);
+    }
+    catch (error) {
+        console.error("Error sending mentorship request:", error);
+        res.status(500).json({ message: "Failed to send mentorship request" });
+    }
+};
+exports.sendRequest = sendRequest;

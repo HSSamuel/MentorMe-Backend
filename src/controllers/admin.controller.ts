@@ -85,7 +85,6 @@ export const getAllSessions = async (
   }
 };
 
-// POST /admin/matches
 export const assignMentor = async (
   req: Request,
   res: Response
@@ -103,8 +102,6 @@ export const assignMentor = async (
     });
 
     if (existingRequest) {
-      // --- [FIX 1] ---
-      // Removed the `return` keyword to match the 'void' return type.
       res.status(409).json({
         message: "A mentorship request between these users already exists.",
       });
@@ -116,8 +113,9 @@ export const assignMentor = async (
         menteeId,
         mentorId,
         status: "ACCEPTED",
-        // --- [FIX 2] ---
-        // Removed the 'message' field as it does not exist in your Prisma schema.
+        // --- [THE FIX] ---
+        // Added the required 'message' field with a default value for admin actions.
+        message: "This mentorship was manually created by an administrator.",
       },
     });
 
