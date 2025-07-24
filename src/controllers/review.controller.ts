@@ -15,7 +15,6 @@ export const createReview = async (
   const { mentorshipRequestId, rating, comment } = req.body;
 
   if (!userId) {
-    // Corrected: Removed 'return'
     res.status(401).json({ message: "Authentication error" });
     return;
   }
@@ -31,7 +30,6 @@ export const createReview = async (
     });
 
     if (!mentorship) {
-      // Corrected: Removed 'return'
       res
         .status(403)
         .json({ message: "You are not authorized to review this mentorship." });
@@ -44,7 +42,6 @@ export const createReview = async (
     });
 
     if (existingReview) {
-      // Corrected: Removed 'return'
       res
         .status(400)
         .json({ message: "A review for this mentorship already exists." });
@@ -80,14 +77,15 @@ export const getReviewsForMentor = async (
           mentorId: mentorId,
         },
       },
+      // --- [THE FIX] ---
+      // This 'include' is updated to fetch the mentee's full profile (including avatar),
+      // which is needed by the frontend to display the review correctly.
       include: {
         mentorshipRequest: {
           select: {
             mentee: {
               select: {
-                profile: {
-                  select: { name: true },
-                },
+                profile: true, // Fetches the entire profile
               },
             },
           },

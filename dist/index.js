@@ -13,7 +13,6 @@ const http_1 = require("http");
 const path_1 = __importDefault(require("path"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const connect_mongo_1 = __importDefault(require("connect-mongo"));
-// --- [ADDED] Import the Server class from socket.io ---
 const socket_io_1 = require("socket.io");
 // Route handlers
 const auth_routes_1 = __importDefault(require("./routes/auth.routes"));
@@ -30,7 +29,6 @@ const ai_routes_1 = __importDefault(require("./routes/ai.routes"));
 const stream_routes_1 = __importDefault(require("./routes/stream.routes"));
 // Configurations and Services
 require("./config/passport");
-// --- [ADDED] Import the socket service to initialize it ---
 const socket_service_1 = require("./services/socket.service");
 const error_middleware_1 = require("./middleware/error.middleware");
 require("./jobs/reminder.cron");
@@ -45,7 +43,6 @@ app.set("trust proxy", 1);
 // --- CORS Configuration ---
 const allowedOrigins = [
     "https://dsamentor.netlify.app",
-    "https://mentor-me-pi.vercel.app",
     "http://localhost:3000",
     process.env.VITE_FRONTEND_URL,
 ].filter(Boolean);
@@ -108,12 +105,9 @@ app.get("/", (req, res) => {
 });
 app.use(error_middleware_1.jsonErrorHandler);
 const httpServer = (0, http_1.createServer)(app);
-// --- [ADDED] Socket.IO Server Initialization ---
-// Create a new Socket.IO server and attach it to the HTTP server.
 const io = new socket_io_1.Server(httpServer, {
     cors: corsOptions,
 });
-// Attach the 'io' instance to the app's locals to make it accessible in controllers.
 app.locals.io = io;
 // Initialize all the socket event listeners (like 'connection', 'join', etc.).
 (0, socket_service_1.initializeSocket)(io);

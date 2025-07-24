@@ -138,7 +138,6 @@ export const setAvailability = async (
   res: Response
 ): Promise<void> => {
   const mentorId = getUserId(req);
-  // This line retrieves the Socket.IO instance that was attached to the app in `index.ts`.
   const io = req.app.locals.io;
 
   if (!mentorId) {
@@ -160,9 +159,7 @@ export const setAvailability = async (
       await prisma.availability.createMany({ data: availabilityData });
     }
 
-    // --- [ADDED] Safety check to prevent crashing if the io object is not available ---
     if (io) {
-      // This emits a real-time event to all connected clients.
       io.emit("availabilityUpdated", { mentorId });
     } else {
       console.warn("Socket.IO not initialized, skipping emit event.");
@@ -233,6 +230,20 @@ export const createSession = async (
       }
     } catch (calendarError) {
       console.error("Could not create calendar event:", calendarError);
+    }
+
+    // --- [REAL-TIME UPDATE] ---
+    // After creating a session, emit an event to the admin room.
+    const io = req.app.locals.io;
+    if (io) {
+      const sessionWithDetails = await prisma.session.findUnique({
+        where: { id: newSession.id },
+        include: {
+          mentor: { select: { profile: true } },
+          mentee: { select: { profile: true } },
+        },
+      });
+      io.to("admin-room").emit("newSession", sessionWithDetails);
     }
 
     res.status(201).json(newSession);
@@ -317,6 +328,20 @@ export const submitFeedback = async (
     });
 
     await awardPoints(userId, 15);
+
+    // --- [REAL-TIME UPDATE] ---
+    // After updating a session, emit an event to the admin room.
+    const io = req.app.locals.io;
+    if (io) {
+      const sessionWithDetails = await prisma.session.findUnique({
+        where: { id: updatedSession.id },
+        include: {
+          mentor: { select: { profile: true } },
+          mentee: { select: { profile: true } },
+        },
+      });
+      io.to("admin-room").emit("sessionUpdated", sessionWithDetails);
+    }
 
     res.status(200).json(updatedSession);
   } catch (error) {
@@ -419,7 +444,6 @@ export const notifyMentorOfCall = async (
     });
 
     const io = req.app.locals.io;
-    // --- [ADDED] Safety check for the io object ---
     if (io) {
       io.to(mentorId).emit("newNotification", notification);
     } else {
@@ -471,8 +495,8 @@ export const createSessionInsights = async (
       return;
     }
 
-    const summaryPrompt = `Based on the following transcript...`;
-    const actionItemsPrompt = `Analyze the following transcript...`;
+    const summaryPrompt = `Based on the following transcript...`; // Your prompt here
+    const actionItemsPrompt = `Analyze the following transcript...`; // Your prompt here
 
     const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
@@ -520,32 +544,29 @@ export const getSessionInsights = async (
   }
 
   try {
-    const session = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        OR: [{ menteeId: userId }, { mentorId: userId }],
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        insights: true, // Include the related insights
+        mentor: { select: { profile: true } },
+        mentee: { select: { profile: true } },
       },
     });
 
     if (!session) {
+      res.status(404).json({ message: "Session not found." });
+      return;
+    }
+
+    // Security check: Ensure the current user is part of the session
+    if (session.mentorId !== userId && session.menteeId !== userId) {
       res
         .status(403)
         .json({ message: "You are not authorized to view these insights." });
       return;
     }
 
-    const insights = await prisma.sessionInsight.findUnique({
-      where: { sessionId },
-    });
-
-    if (!insights) {
-      res.status(404).json({
-        message: "No insights have been generated for this session yet.",
-      });
-      return;
-    }
-
-    res.status(200).json(insights);
+    res.status(200).json(session);
   } catch (error) {
     console.error("Error fetching session insights:", error);
     res.status(500).json({ message: "Failed to fetch session insights." });

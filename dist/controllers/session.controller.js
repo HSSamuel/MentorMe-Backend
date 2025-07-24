@@ -116,7 +116,6 @@ const getMentorAvailability = async (req, res) => {
 exports.getMentorAvailability = getMentorAvailability;
 const setAvailability = async (req, res) => {
     const mentorId = (0, getUserId_1.getUserId)(req);
-    // This line retrieves the Socket.IO instance that was attached to the app in `index.ts`.
     const io = req.app.locals.io;
     if (!mentorId) {
         res.status(401).json({ message: "Authentication error" });
@@ -134,9 +133,7 @@ const setAvailability = async (req, res) => {
         if (availabilityData.length > 0) {
             await client_1.default.availability.createMany({ data: availabilityData });
         }
-        // --- [ADDED] Safety check to prevent crashing if the io object is not available ---
         if (io) {
-            // This emits a real-time event to all connected clients.
             io.emit("availabilityUpdated", { mentorId });
         }
         else {
@@ -200,6 +197,19 @@ const createSession = async (req, res) => {
         }
         catch (calendarError) {
             console.error("Could not create calendar event:", calendarError);
+        }
+        // --- [REAL-TIME UPDATE] ---
+        // After creating a session, emit an event to the admin room.
+        const io = req.app.locals.io;
+        if (io) {
+            const sessionWithDetails = await client_1.default.session.findUnique({
+                where: { id: newSession.id },
+                include: {
+                    mentor: { select: { profile: true } },
+                    mentee: { select: { profile: true } },
+                },
+            });
+            io.to("admin-room").emit("newSession", sessionWithDetails);
         }
         res.status(201).json(newSession);
     }
@@ -274,6 +284,19 @@ const submitFeedback = async (req, res) => {
             data: dataToUpdate,
         });
         await (0, gamification_service_1.awardPoints)(userId, 15);
+        // --- [REAL-TIME UPDATE] ---
+        // After updating a session, emit an event to the admin room.
+        const io = req.app.locals.io;
+        if (io) {
+            const sessionWithDetails = await client_1.default.session.findUnique({
+                where: { id: updatedSession.id },
+                include: {
+                    mentor: { select: { profile: true } },
+                    mentee: { select: { profile: true } },
+                },
+            });
+            io.to("admin-room").emit("sessionUpdated", sessionWithDetails);
+        }
         res.status(200).json(updatedSession);
     }
     catch (error) {
@@ -352,7 +375,6 @@ const notifyMentorOfCall = async (req, res) => {
             },
         });
         const io = req.app.locals.io;
-        // --- [ADDED] Safety check for the io object ---
         if (io) {
             io.to(mentorId).emit("newNotification", notification);
         }
@@ -397,8 +419,8 @@ const createSessionInsights = async (req, res) => {
                 .json({ message: "You are not a participant of this session." });
             return;
         }
-        const summaryPrompt = `Based on the following transcript...`;
-        const actionItemsPrompt = `Analyze the following transcript...`;
+        const summaryPrompt = `Based on the following transcript...`; // Your prompt here
+        const actionItemsPrompt = `Analyze the following transcript...`; // Your prompt here
         const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const [summaryResponse, actionItemsResponse] = await Promise.all([
             geminiModel.generateContent(summaryPrompt),
@@ -435,28 +457,26 @@ const getSessionInsights = async (req, res) => {
         return;
     }
     try {
-        const session = await client_1.default.session.findFirst({
-            where: {
-                id: sessionId,
-                OR: [{ menteeId: userId }, { mentorId: userId }],
+        const session = await client_1.default.session.findUnique({
+            where: { id: sessionId },
+            include: {
+                insights: true, // Include the related insights
+                mentor: { select: { profile: true } },
+                mentee: { select: { profile: true } },
             },
         });
         if (!session) {
+            res.status(404).json({ message: "Session not found." });
+            return;
+        }
+        // Security check: Ensure the current user is part of the session
+        if (session.mentorId !== userId && session.menteeId !== userId) {
             res
                 .status(403)
                 .json({ message: "You are not authorized to view these insights." });
             return;
         }
-        const insights = await client_1.default.sessionInsight.findUnique({
-            where: { sessionId },
-        });
-        if (!insights) {
-            res.status(404).json({
-                message: "No insights have been generated for this session yet.",
-            });
-            return;
-        }
-        res.status(200).json(insights);
+        res.status(200).json(session);
     }
     catch (error) {
         console.error("Error fetching session insights:", error);

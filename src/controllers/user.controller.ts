@@ -69,7 +69,11 @@ export const getUserPublicProfile = async (
       return;
     }
     console.log(
-      `Successfully fetched public profile for: ${userPublicProfile.profile ? userPublicProfile.profile.name : "Unknown Name"}`
+      `Successfully fetched public profile for: ${
+        userPublicProfile.profile
+          ? userPublicProfile.profile.name
+          : "Unknown Name"
+      }`
     );
     res.status(200).json(userPublicProfile);
   } catch (error) {
@@ -363,3 +367,60 @@ export const getRecommendedMentors = async (
     res.status(500).json({ message: "Error fetching recommended mentors." });
   }
 };
+
+// --- [NEW] FUNCTION TO GET USER CONNECTIONS ---
+export const getUserConnections = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const userId = getUserId(req);
+  if (!userId) {
+    res.status(401).json({ message: "Authentication required" });
+    return;
+  }
+
+  try {
+    const mentorships = await prisma.mentorshipRequest.findMany({
+      where: {
+        status: "ACCEPTED",
+        OR: [{ mentorId: userId }, { menteeId: userId }],
+      },
+      include: {
+        mentor: {
+          include: {
+            profile: true,
+          },
+        },
+        mentee: {
+          include: {
+            profile: true,
+          },
+        },
+      },
+    });
+
+    const connections = mentorships.map((ship) => {
+      // If the current user is the mentor, the connection is the mentee, and vice versa.
+      const otherUser = ship.mentorId === userId ? ship.mentee : ship.mentor;
+      return {
+        id: otherUser.id,
+        email: otherUser.email,
+        role: otherUser.role,
+        name: otherUser.profile?.name || "User", // Provide a fallback name
+        avatarUrl: otherUser.profile?.avatarUrl, // Match the schema field
+      };
+    });
+
+    // Ensure connections are unique by user ID
+    const uniqueConnections = Array.from(
+      new Map(connections.map((item) => [item.id, item])).values()
+    );
+
+    res.status(200).json(uniqueConnections);
+  } catch (error) {
+    console.error("Error fetching user connections:", error);
+    next(error); // Pass error to the global error handler
+  }
+};
+// --- END OF NEW FUNCTION ---

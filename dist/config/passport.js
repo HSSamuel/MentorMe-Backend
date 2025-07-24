@@ -6,8 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const passport_1 = __importDefault(require("passport"));
 const passport_google_oauth20_1 = require("passport-google-oauth20");
 const passport_facebook_1 = require("passport-facebook");
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
+const client_1 = __importDefault(require("../client"));
+const stream_controller_1 = require("../controllers/stream.controller");
 // Google Strategy
 passport_1.default.use(new passport_google_oauth20_1.Strategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
@@ -19,12 +19,13 @@ passport_1.default.use(new passport_google_oauth20_1.Strategy({
         const userEmail = profile.emails?.[0].value;
         const googleId = profile.id;
         const displayName = profile.displayName;
+        const avatarUrl = profile.photos?.[0].value;
         // Ensure an email address is returned from Google, which is required by your schema.
         if (!userEmail) {
             return done(new Error("No email address found from Google profile."), false);
         }
         // 1. Find user by their unique Google ID first. This handles a returning user.
-        let user = await prisma.user.findUnique({
+        let user = await client_1.default.user.findFirst({
             where: { googleId: googleId },
         });
         if (user) {
@@ -33,29 +34,43 @@ passport_1.default.use(new passport_google_oauth20_1.Strategy({
         }
         // 2. If no user with that Google ID, check if the email is already in use.
         // This handles a user who first signed up with email/password and now uses Google.
-        user = await prisma.user.findUnique({
+        user = await client_1.default.user.findUnique({
             where: { email: userEmail },
         });
         if (user) {
             // User exists, so link their Google ID to the existing account.
-            user = await prisma.user.update({
+            user = await client_1.default.user.update({
                 where: { id: user.id },
                 data: { googleId: googleId },
             });
             return done(null, user);
         }
         // 3. If no user is found by Google ID or email, it's a new user. Create them.
-        const newUser = await prisma.user.create({
+        const newUser = await client_1.default.user.create({
             data: {
                 email: userEmail,
                 googleId: googleId,
                 profile: {
                     create: {
                         name: displayName,
+                        avatarUrl: avatarUrl,
                     },
                 },
             },
         });
+        // --- [NEW] Create the new user in Stream ---
+        try {
+            await stream_controller_1.streamClient.upsertUser({
+                id: newUser.id,
+                name: displayName,
+                image: avatarUrl,
+                role: "user", // Default role for OAuth users
+            });
+        }
+        catch (chatError) {
+            console.error("Error creating Google user in Stream:", chatError);
+        }
+        // --- End of Stream user creation ---
         return done(null, newUser);
     }
     catch (error) {
@@ -67,41 +82,57 @@ passport_1.default.use(new passport_facebook_1.Strategy({
     clientID: process.env.FACEBOOK_APP_ID,
     clientSecret: process.env.FACEBOOK_APP_SECRET,
     callbackURL: "/api/auth/facebook/callback",
-    profileFields: ["id", "displayName", "emails"],
+    profileFields: ["id", "displayName", "emails", "photos"],
     enableProof: true,
 }, async (accessToken, refreshToken, profile, done) => {
     try {
         const userEmail = profile.emails?.[0].value;
+        const displayName = profile.displayName;
+        const avatarUrl = profile.photos?.[0].value;
         if (!userEmail) {
             return done(new Error("No email address found from Facebook profile."), false);
         }
-        let user = await prisma.user.findUnique({
+        let user = await client_1.default.user.findFirst({
             where: { facebookId: profile.id },
         });
         if (user) {
             return done(null, user);
         }
-        user = await prisma.user.findUnique({
+        user = await client_1.default.user.findUnique({
             where: { email: userEmail },
         });
         if (user) {
-            user = await prisma.user.update({
+            user = await client_1.default.user.update({
                 where: { id: user.id },
                 data: { facebookId: profile.id },
             });
             return done(null, user);
         }
-        const newUser = await prisma.user.create({
+        const newUser = await client_1.default.user.create({
             data: {
                 email: userEmail,
                 facebookId: profile.id,
                 profile: {
                     create: {
-                        name: profile.displayName,
+                        name: displayName,
+                        avatarUrl: avatarUrl,
                     },
                 },
             },
         });
+        // --- [NEW] Create the new user in Stream ---
+        try {
+            await stream_controller_1.streamClient.upsertUser({
+                id: newUser.id,
+                name: displayName,
+                image: avatarUrl,
+                role: "user",
+            });
+        }
+        catch (chatError) {
+            console.error("Error creating Facebook user in Stream:", chatError);
+        }
+        // --- End of Stream user creation ---
         return done(null, newUser);
     }
     catch (error) {
@@ -113,7 +144,7 @@ passport_1.default.serializeUser((user, done) => {
 });
 passport_1.default.deserializeUser(async (id, done) => {
     try {
-        const user = await prisma.user.findUnique({ where: { id: id } });
+        const user = await client_1.default.user.findUnique({ where: { id: id } });
         done(null, user);
     }
     catch (error) {

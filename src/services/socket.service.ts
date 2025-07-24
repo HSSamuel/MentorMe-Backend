@@ -40,7 +40,8 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
     }
   });
 
-  io.on("connection", (socket: CustomSocket) => {
+  io.on("connection", async (socket: CustomSocket) => {
+    // Made the handler async
     const userId = socket.user?.userId;
     if (!userId) {
       return socket.disconnect(true);
@@ -50,7 +51,27 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
       `\n🟢 Data socket connected: Socket ID ${socket.id}, User ID ${userId}`
     );
 
-    // --- [NEW] Global Presence and Personal Room Logic for Main Chat ---
+    // --- [THE FIX] ---
+    // This logic checks the user's role and adds them to a special room if they are an admin.
+    // This allows us to send real-time updates specifically to all connected admins.
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true },
+      });
+      if (user && user.role === "ADMIN") {
+        socket.join("admin-room");
+        console.log(`[Admin] User ${userId} joined the admin-room.`);
+      }
+    } catch (error) {
+      console.error(
+        `Failed to fetch user role for socket connection: ${userId}`,
+        error
+      );
+    }
+    // --- End of new logic ---
+
+    // --- Global Presence and Personal Room Logic for Main Chat ---
     userSockets.set(userId, socket.id);
     socket.join(userId); // Join a personal room for direct notifications
     io.emit("userStatusChange", { userId, isOnline: true, lastSeen: null });
@@ -76,7 +97,7 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
       }
     );
 
-    // --- [NEW] Event Handlers for Main Messaging Feature ---
+    // --- Event Handlers for Main Messaging Feature ---
 
     socket.on("joinConversation", (conversationId: string) => {
       socket.join(conversationId);
@@ -146,7 +167,7 @@ export const initializeSocket = (ioInstance: SocketIOServer) => {
 
     socket.on("disconnect", async () => {
       console.log(`\n🔴 Data socket disconnected: Socket ID ${socket.id}`);
-      // --- [NEW] Global Presence on Disconnect for Main Chat ---
+      // --- Global Presence on Disconnect for Main Chat ---
       userSockets.delete(userId);
       const lastSeen = new Date().toISOString();
       try {

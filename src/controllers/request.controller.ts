@@ -4,8 +4,6 @@ import { awardPoints } from "../services/gamification.service";
 import prisma from "../client";
 import { StreamChat } from "stream-chat";
 
-// --- [FIX 3] Initialize the Stream Chat server client ---
-// Ensure your .env file has STREAM_API_KEY and STREAM_API_SECRET
 const streamClient = StreamChat.getInstance(
   process.env.STREAM_API_KEY!,
   process.env.STREAM_API_SECRET!

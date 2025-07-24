@@ -1,5 +1,3 @@
-// Mentor/Backend/src/routes/review.routes.ts
-
 import { Router } from "express";
 import {
   createReview,
@@ -14,7 +12,8 @@ import { validateRequest } from "../middleware/validateRequest";
 
 const router = Router();
 
-// Mentee: Create a new review for a mentorship
+// POST /api/reviews/
+// This route allows an authenticated mentee to create a new review for a mentorship.
 router.post(
   "/",
   authMiddleware,
@@ -32,7 +31,9 @@ router.post(
   createReview
 );
 
-// Public: Get all reviews for a specific mentor
+// GET /api/reviews/mentor/:mentorId
+// This route is public and fetches all reviews for a specific mentor's profile.
+// It correctly points to the getReviewsForMentor function we updated.
 router.get(
   "/mentor/:mentorId",
   [param("mentorId").isMongoId().withMessage("Invalid mentor ID")],

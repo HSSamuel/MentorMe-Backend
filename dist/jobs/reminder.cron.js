@@ -1,13 +1,15 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.checkUpcomingSessions = void 0;
 const email_service_1 = require("../services/email.service");
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
+const client_1 = __importDefault(require("../client"));
 const checkUpcomingSessions = async () => {
     const now = new Date();
     const oneHourLater = new Date(now.getTime() + 60 * 60000);
-    const sessions = await prisma.session.findMany({
+    const sessions = await client_1.default.session.findMany({
         where: {
             date: {
                 gte: now,

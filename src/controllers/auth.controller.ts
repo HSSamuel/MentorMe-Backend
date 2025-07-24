@@ -6,14 +6,10 @@ import crypto from "crypto";
 import { sendPasswordResetEmail } from "../services/email.service";
 import config from "../config";
 import prisma from "../client";
-import { StreamChat } from "stream-chat";
+// --- [MODIFIED] Import the shared streamClient instance ---
+import { streamClient } from "./stream.controller";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
-
-const streamClient = StreamChat.getInstance(
-  process.env.STREAM_API_KEY!,
-  process.env.STREAM_API_SECRET!
-);
 
 const getUserId = (req: Request): string | null => {
   if (!req.user) return null;
@@ -65,6 +61,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     });
 
     try {
+      // --- This logic correctly uses the imported streamClient ---
       await streamClient.upsertUser({
         id: user.id,
         name: user.profile?.name || user.email.split("@")[0],
@@ -113,7 +110,9 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         role: user.role.toLowerCase(),
         image:
           user.profile?.avatarUrl ||
-          `https://ui-avatars.com/api/?name=${encodeURIComponent(user.profile?.name || user.email)}&background=random&color=fff`,
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(
+            user.profile?.name || user.email
+          )}&background=random&color=fff`,
       });
       console.log(`User ${user.id} synced to Stream Chat on login.`);
     } catch (chatError) {
@@ -192,7 +191,9 @@ export const forgotPassword = async (
       },
     });
 
-    const resetURL = `${config.get("FRONTEND_URL")}/reset-password/${resetToken}`;
+    const resetURL = `${config.get(
+      "FRONTEND_URL"
+    )}/reset-password/${resetToken}`;
 
     await sendPasswordResetEmail(user.email, resetURL);
 

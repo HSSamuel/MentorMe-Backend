@@ -8,7 +8,6 @@ import { createServer } from "http";
 import path from "path";
 import rateLimit from "express-rate-limit";
 import MongoStore from "connect-mongo";
-// --- [ADDED] Import the Server class from socket.io ---
 import { Server } from "socket.io";
 
 // Route handlers
@@ -27,7 +26,6 @@ import streamRoutes from "./routes/stream.routes";
 
 // Configurations and Services
 import "./config/passport";
-// --- [ADDED] Import the socket service to initialize it ---
 import { initializeSocket } from "./services/socket.service";
 import { jsonErrorHandler } from "./middleware/error.middleware";
 import "./jobs/reminder.cron";
@@ -46,8 +44,7 @@ app.set("trust proxy", 1);
 // --- CORS Configuration ---
 const allowedOrigins = [
   "https://dsamentor.netlify.app",
-  "https://mentor-me-pi.vercel.app",
-  "http://localhost:3000",
+   "http://localhost:3000",
   process.env.VITE_FRONTEND_URL,
 ].filter(Boolean) as string[];
 
@@ -126,14 +123,10 @@ app.get("/", (req, res) => {
 app.use(jsonErrorHandler);
 
 const httpServer = createServer(app);
-
-// --- [ADDED] Socket.IO Server Initialization ---
-// Create a new Socket.IO server and attach it to the HTTP server.
 const io = new Server(httpServer, {
   cors: corsOptions,
 });
 
-// Attach the 'io' instance to the app's locals to make it accessible in controllers.
 app.locals.io = io;
 
 // Initialize all the socket event listeners (like 'connection', 'join', etc.).

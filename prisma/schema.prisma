@@ -8,43 +8,45 @@ datasource db {
 }
 
 model Level {
-  id        String @id @default(auto()) @map("_id") @db.ObjectId
-  name      String @unique
+  id      String @id @default(auto()) @map("_id") @db.ObjectId
+  name    String @unique
   minPoints Int    @default(0)
-  users     User[]
+  users   User[]
 }
 
 model User {
-  id                   String              @id @default(auto()) @map("_id") @db.ObjectId
-  email                String              @unique
-  password             String?
-  role                 Role                @default(MENTEE)
-  googleId             String?             @unique
-  facebookId           String?             @unique
-  profile              Profile?
-  sentRequests         MentorshipRequest[] @relation("MenteeRequests")
-  receivedRequests     MentorshipRequest[] @relation("MentorRequests")
-  mentorSessions       Session[]           @relation("MentorSessions")
-  menteeSessions       Session[]           @relation("MenteeSessions")
-  sentMessages         Message[]           @relation("SentMessages")
-  notifications        Notification[]
-  availabilities       Availability[]
-  aiConversations      AIConversation[]
-  googleAccessToken    String?
-  googleRefreshToken   String?
-  passwordResetToken   String?
+  id                 String              @id @default(auto()) @map("_id") @db.ObjectId
+  email              String              @unique
+  password           String?
+  role               Role                @default(MENTEE)
+  googleId           String?             @unique // Ensure this is unique if you use it for logins
+  facebookId         String?             @unique // Ensure this is unique if you use it for logins
+  profile            Profile?
+  sentRequests       MentorshipRequest[] @relation("MenteeRequests")
+  receivedRequests   MentorshipRequest[] @relation("MentorRequests")
+  mentorSessions     Session[]           @relation("MentorSessions")
+  menteeSessions     Session[]           @relation("MenteeSessions")
+  sentMessages       Message[]           @relation("SentMessages")
+  notifications      Notification[]
+  availabilities     Availability[]
+  aiConversations    AIConversation[]
+  googleAccessToken  String?
+  googleRefreshToken String?
+  passwordResetToken String?
   passwordResetExpires DateTime?
-  conversations        Conversation[]      @relation(fields: [conversationIDs], references: [id])
-  conversationIDs      String[]            @db.ObjectId
-  points               Int                 @default(0)
-  levelId              String?             @db.ObjectId
-  level                Level?              @relation(fields: [levelId], references: [id])
-  lastSeen             DateTime            @default(now()) @updatedAt
-  profileEmbedding     Float[]
+  conversations      Conversation[]      @relation(fields: [conversationIDs], references: [id])
+  conversationIDs    String[]            @db.ObjectId
+  points             Int                 @default(0)
+  levelId            String?             @db.ObjectId
+  level              Level?              @relation(fields: [levelId], references: [id])
+  lastSeen           DateTime            @default(now()) @updatedAt
+  profileEmbedding   Float[]
+  readMessages       Message[]           @relation("ReadByUsers", fields: [readMessageIDs], references: [id])
+  readMessageIDs     String[]            @db.ObjectId
   
-  // --- [UPDATED] Correctly defined the many-to-many relation for read receipts ---
-  readMessages         Message[]           @relation("ReadByUsers", fields: [readMessageIDs], references: [id])
-  readMessageIDs       String[]            @db.ObjectId
+  // --- [THE FIX] ---
+  // Added the missing createdAt field to track when a user is created.
+  createdAt          DateTime            @default(now())
 }
 
 model Profile {
@@ -60,15 +62,21 @@ model Profile {
 
 model MentorshipRequest {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  menteeId  String   @db.ObjectId
   mentorId  String   @db.ObjectId
+  menteeId  String   @db.ObjectId
   status    String   @default("PENDING")
+  message   String
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  mentee    User     @relation("MenteeRequests", fields: [menteeId], references: [id])
-  mentor    User     @relation("MentorRequests", fields: [mentorId], references: [id])
-  review    Review?
-  goals     Goal[]
+
+  // Relationships
+  mentor  User     @relation("MentorRequests", fields: [mentorId], references: [id])
+  mentee  User     @relation("MenteeRequests", fields: [menteeId], references: [id])
+  reviews Review[]
+  goals   Goal[]   // Added the missing relation to Goal
+
+  // Indexes
+  @@index([mentorId, status])
+  @@index([menteeId, status])
 }
 
 model SessionInsight {
@@ -81,16 +89,19 @@ model SessionInsight {
 }
 
 model Session {
-  id        String          @id @default(auto()) @map("_id") @db.ObjectId
-  mentorId  String          @db.ObjectId
-  menteeId  String          @db.ObjectId
-  date      DateTime
-  rating    Int?
-  feedback  String?
-  mentor    User            @relation("MentorSessions", fields: [mentorId], references: [id])
-  mentee    User            @relation("MenteeSessions", fields: [menteeId], references: [id])
-  createdAt DateTime        @default(now())
-  insights  SessionInsight?
+  id         String          @id @default(auto()) @map("_id") @db.ObjectId
+  mentorId   String          @db.ObjectId
+  menteeId   String          @db.ObjectId
+  date       DateTime
+  rating     Int?
+  feedback   String?
+  mentor     User            @relation("MentorSessions", fields: [mentorId], references: [id])
+  mentee     User            @relation("MenteeSessions", fields: [menteeId], references: [id])
+  createdAt  DateTime        @default(now())
+  insights   SessionInsight?
+
+  @@index([mentorId, date])
+  @@index([menteeId, date])
 }
 
 model Review {
@@ -150,6 +161,7 @@ model Conversation {
   messages       Message[]
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+  streamChannelId String?   @unique
 }
 
 model Message {
@@ -160,20 +172,18 @@ model Message {
   sender         User         @relation("SentMessages", fields: [senderId], references: [id])
   content        String
   createdAt      DateTime     @default(now())
-
-  // --- [UPDATED] Correctly defined the many-to-many relation for read receipts ---
   readBy         User[]       @relation("ReadByUsers", fields: [readByIds], references: [id])
   readByIds      String[]     @db.ObjectId
 }
 
 model AIConversation {
-  id        String      @id @default(auto()) @map("_id") @db.ObjectId
-  userId    String      @db.ObjectId
-  user      User        @relation(fields: [userId], references: [id])
-  title     String
-  messages  AIMessage[]
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id         String      @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String      @db.ObjectId
+  user       User        @relation(fields: [userId], references: [id])
+  title      String
+  messages   AIMessage[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 }
 
 model AIMessage {

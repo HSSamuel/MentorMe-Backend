@@ -124,7 +124,8 @@ router.post(
   createSessionInsights
 );
 
-// GET: Any authenticated participant can retrieve the insights for a session
+// GET: This is the primary route for the SessionInsightsPage.
+// It fetches the full session details AND the nested AI insights.
 router.get(
   "/:sessionId/insights",
   authMiddleware,
@@ -134,6 +135,7 @@ router.get(
 );
 
 // --- Route to get details of a single session ---
+// This is a general-purpose route to get session info without the insights.
 router.get(
   "/:sessionId",
   authMiddleware,

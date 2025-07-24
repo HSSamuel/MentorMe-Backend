@@ -11,9 +11,9 @@ const crypto_1 = __importDefault(require("crypto"));
 const email_service_1 = require("../services/email.service");
 const config_1 = __importDefault(require("../config"));
 const client_1 = __importDefault(require("../client"));
-const stream_chat_1 = require("stream-chat");
+// --- [MODIFIED] Import the shared streamClient instance ---
+const stream_controller_1 = require("./stream.controller");
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key";
-const streamClient = stream_chat_1.StreamChat.getInstance(process.env.STREAM_API_KEY, process.env.STREAM_API_SECRET);
 const getUserId = (req) => {
     if (!req.user)
         return null;
@@ -60,7 +60,8 @@ const register = async (req, res) => {
             },
         });
         try {
-            await streamClient.upsertUser({
+            // --- This logic correctly uses the imported streamClient ---
+            await stream_controller_1.streamClient.upsertUser({
                 id: user.id,
                 name: user.profile?.name || user.email.split("@")[0],
                 role: user.role.toLowerCase(),
@@ -97,7 +98,7 @@ const login = async (req, res) => {
         // --- [ADDED] Sync user to Stream Chat on every login ---
         // This ensures all existing users are created in Stream.
         try {
-            await streamClient.upsertUser({
+            await stream_controller_1.streamClient.upsertUser({
                 id: user.id,
                 name: user.profile?.name || user.email.split("@")[0],
                 role: user.role.toLowerCase(),

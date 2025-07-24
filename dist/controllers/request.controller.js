@@ -7,8 +7,6 @@ exports.updateRequestStatus = exports.getReceivedRequests = exports.getSentReque
 const gamification_service_1 = require("../services/gamification.service");
 const client_1 = __importDefault(require("../client"));
 const stream_chat_1 = require("stream-chat");
-// --- [FIX 3] Initialize the Stream Chat server client ---
-// Ensure your .env file has STREAM_API_KEY and STREAM_API_SECRET
 const streamClient = stream_chat_1.StreamChat.getInstance(process.env.STREAM_API_KEY, process.env.STREAM_API_SECRET);
 const getUserIdForRequest = (req) => {
     if (!req.user)

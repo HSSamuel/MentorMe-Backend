@@ -1,8 +1,10 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ensureProfileComplete = void 0;
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
+const client_1 = __importDefault(require("../client"));
 const ensureProfileComplete = async (req, res, next) => {
     // First, ensure the user object and its ID exist on the request.
     if (!req.user || !req.user.userId) {
@@ -12,7 +14,7 @@ const ensureProfileComplete = async (req, res, next) => {
     }
     try {
         const userId = req.user.userId;
-        const user = await prisma.user.findUnique({
+        const user = await client_1.default.user.findUnique({
             where: { id: userId },
             include: { profile: true },
         });

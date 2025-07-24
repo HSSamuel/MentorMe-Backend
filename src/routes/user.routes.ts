@@ -3,11 +3,12 @@ import {
   updateMyProfile,
   getMentorStats,
   getMenteeStats,
-  getAllMentors,
+  getAllMentors, // We will use this for the new route
   getAvailableSkills,
   getUserPublicProfile,
   getRecommendedMentors,
   getMyProfile,
+  getUserConnections,
 } from "../controllers/user.controller";
 import {
   authMiddleware,
@@ -18,6 +19,11 @@ import { validateRequest } from "../middleware/validateRequest";
 import { upload } from "../middleware/fileUpload.middleware";
 
 const router = Router();
+
+// --- [THE FIX] ---
+// Added a route for the base path ('/') to handle GET requests to /api/users
+router.get("/", authMiddleware, getAllMentors);
+// --- END OF FIX ---
 
 // All PUT and specific GET routes should come first.
 router.put(
@@ -35,8 +41,9 @@ router.put(
 );
 
 router.get("/me/profile", authMiddleware, getMyProfile);
+router.get("/connections", authMiddleware, getUserConnections);
 
-// --- [NEW] ROUTES FOR DASHBOARD STATISTICS ---
+// --- ROUTES FOR DASHBOARD STATISTICS ---
 router.get(
   "/mentor/:id/stats",
   authMiddleware,
@@ -46,13 +53,13 @@ router.get(
 );
 
 router.get("/mentee/stats", authMiddleware, getMenteeStats);
-// --- END OF NEW ROUTES ---
+// --- END OF ROUTES ---
 
 router.get("/mentors", authMiddleware, getAllMentors);
 router.get("/skills", authMiddleware, getAvailableSkills);
 router.get("/mentors/recommended", authMiddleware, getRecommendedMentors);
 
-// [FIX]: The generic '/:id' route is moved to the end.
+// The generic '/:id' route is moved to the end.
 router.get(
   "/:id",
   [param("id").isMongoId().withMessage("Invalid user ID")],

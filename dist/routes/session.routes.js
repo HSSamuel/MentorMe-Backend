@@ -47,8 +47,10 @@ router.post("/:sessionId/insights", auth_middleware_1.authMiddleware, [
         .isLength({ min: 50 })
         .withMessage("Transcript must be at least 50 characters long."),
 ], validateRequest_1.validateRequest, session_controller_1.createSessionInsights);
-// GET: Any authenticated participant can retrieve the insights for a session
+// GET: This is the primary route for the SessionInsightsPage.
+// It fetches the full session details AND the nested AI insights.
 router.get("/:sessionId/insights", auth_middleware_1.authMiddleware, [(0, express_validator_1.param)("sessionId").isMongoId().withMessage("Invalid session ID")], validateRequest_1.validateRequest, session_controller_1.getSessionInsights);
 // --- Route to get details of a single session ---
+// This is a general-purpose route to get session info without the insights.
 router.get("/:sessionId", auth_middleware_1.authMiddleware, [(0, express_validator_1.param)("sessionId").isMongoId().withMessage("Invalid session ID")], validateRequest_1.validateRequest, session_controller_1.getSessionDetails);
 exports.default = router;

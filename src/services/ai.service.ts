@@ -5,9 +5,6 @@ import prisma from "../client"; // Your Prisma client instance
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 /**
- * Calculates the cosine similarity between two vectors.
- * This measures the cosine of the angle between two vectors,
- * providing a score of how similar they are in direction.
  * @param vecA - The first vector.
  * @param vecB - The second vector.
  * @returns The cosine similarity score (from -1 to 1).

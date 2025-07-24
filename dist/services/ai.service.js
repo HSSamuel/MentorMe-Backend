@@ -9,9 +9,6 @@ const client_1 = __importDefault(require("../client")); // Your Prisma client in
 // It's best practice to use an environment variable for your API key
 const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 /**
- * Calculates the cosine similarity between two vectors.
- * This measures the cosine of the angle between two vectors,
- * providing a score of how similar they are in direction.
  * @param vecA - The first vector.
  * @param vecB - The second vector.
  * @returns The cosine similarity score (from -1 to 1).

@@ -1,6 +1,5 @@
 import { sendReminderEmail } from "../services/email.service";
-import { PrismaClient } from "@prisma/client";
-const prisma = new PrismaClient();
+import prisma from "../client";
 
 export const checkUpcomingSessions = async () => {
   const now = new Date();

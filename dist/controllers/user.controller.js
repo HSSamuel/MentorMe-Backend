@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRecommendedMentors = exports.updateMyProfile = exports.getMenteeStats = exports.getMentorStats = exports.getAvailableSkills = exports.getAllMentors = exports.getUserPublicProfile = exports.getMyProfile = void 0;
+exports.getUserConnections = exports.getRecommendedMentors = exports.updateMyProfile = exports.getMenteeStats = exports.getMentorStats = exports.getAvailableSkills = exports.getAllMentors = exports.getUserPublicProfile = exports.getMyProfile = void 0;
 const client_1 = __importDefault(require("../client"));
 const getUserId_1 = require("../utils/getUserId");
 const ai_service_1 = require("../services/ai.service");
@@ -63,7 +63,9 @@ const getUserPublicProfile = async (req, res, next) => {
             res.status(404).json({ message: "User profile not found." });
             return;
         }
-        console.log(`Successfully fetched public profile for: ${userPublicProfile.profile ? userPublicProfile.profile.name : "Unknown Name"}`);
+        console.log(`Successfully fetched public profile for: ${userPublicProfile.profile
+            ? userPublicProfile.profile.name
+            : "Unknown Name"}`);
         res.status(200).json(userPublicProfile);
     }
     catch (error) {
@@ -319,3 +321,51 @@ const getRecommendedMentors = async (req, res) => {
     }
 };
 exports.getRecommendedMentors = getRecommendedMentors;
+// --- [NEW] FUNCTION TO GET USER CONNECTIONS ---
+const getUserConnections = async (req, res, next) => {
+    const userId = (0, getUserId_1.getUserId)(req);
+    if (!userId) {
+        res.status(401).json({ message: "Authentication required" });
+        return;
+    }
+    try {
+        const mentorships = await client_1.default.mentorshipRequest.findMany({
+            where: {
+                status: "ACCEPTED",
+                OR: [{ mentorId: userId }, { menteeId: userId }],
+            },
+            include: {
+                mentor: {
+                    include: {
+                        profile: true,
+                    },
+                },
+                mentee: {
+                    include: {
+                        profile: true,
+                    },
+                },
+            },
+        });
+        const connections = mentorships.map((ship) => {
+            // If the current user is the mentor, the connection is the mentee, and vice versa.
+            const otherUser = ship.mentorId === userId ? ship.mentee : ship.mentor;
+            return {
+                id: otherUser.id,
+                email: otherUser.email,
+                role: otherUser.role,
+                name: otherUser.profile?.name || "User", // Provide a fallback name
+                avatarUrl: otherUser.profile?.avatarUrl, // Match the schema field
+            };
+        });
+        // Ensure connections are unique by user ID
+        const uniqueConnections = Array.from(new Map(connections.map((item) => [item.id, item])).values());
+        res.status(200).json(uniqueConnections);
+    }
+    catch (error) {
+        console.error("Error fetching user connections:", error);
+        next(error); // Pass error to the global error handler
+    }
+};
+exports.getUserConnections = getUserConnections;
+// --- END OF NEW FUNCTION ---
