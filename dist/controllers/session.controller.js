@@ -283,7 +283,8 @@ const submitFeedback = async (req, res) => {
             where: { id },
             data: dataToUpdate,
         });
-        await (0, gamification_service_1.awardPoints)(userId, 15);
+        // Award 10 points for submitting feedback
+        await (0, gamification_service_1.awardPoints)(userId, 10);
         // --- [REAL-TIME UPDATE] ---
         // After updating a session, emit an event to the admin room.
         const io = req.app.locals.io;

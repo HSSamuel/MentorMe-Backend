@@ -135,6 +135,8 @@ const getMe = async (req, res) => {
                 email: true,
                 role: true,
                 profile: true,
+                points: true,
+                level: true,
                 googleAccessToken: true,
                 googleRefreshToken: true,
             },

@@ -150,6 +150,8 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
         email: true,
         role: true,
         profile: true,
+        points: true,
+        level: true,
         googleAccessToken: true,
         googleRefreshToken: true,
       },

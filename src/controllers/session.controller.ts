@@ -327,7 +327,8 @@ export const submitFeedback = async (
       data: dataToUpdate,
     });
 
-    await awardPoints(userId, 15);
+    // Award 10 points for submitting feedback
+    await awardPoints(userId, 10);
 
     // --- [REAL-TIME UPDATE] ---
     // After updating a session, emit an event to the admin room.

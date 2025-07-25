@@ -27,6 +27,7 @@ const notification_routes_1 = __importDefault(require("./routes/notification.rou
 const calendar_routes_1 = __importDefault(require("./routes/calendar.routes"));
 const ai_routes_1 = __importDefault(require("./routes/ai.routes"));
 const stream_routes_1 = __importDefault(require("./routes/stream.routes"));
+const gamification_service_1 = require("./services/gamification.service");
 // Configurations and Services
 require("./config/passport");
 const socket_service_1 = require("./services/socket.service");
@@ -117,6 +118,7 @@ const startServer = async () => {
     try {
         await mongoose_1.default.connect(MONGO_URI);
         console.log("🟢 MongoDB connected successfully");
+        await (0, gamification_service_1.seedLevels)();
         httpServer.listen(PORT, () => {
             console.log(`🚀 Server is running on http://localhost:${PORT}`);
         });

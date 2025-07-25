@@ -23,6 +23,7 @@ import notificationRoutes from "./routes/notification.routes";
 import calendarRoutes from "./routes/calendar.routes";
 import aiRoutes from "./routes/ai.routes";
 import streamRoutes from "./routes/stream.routes";
+import { seedLevels } from "./services/gamification.service";
 
 // Configurations and Services
 import "./config/passport";
@@ -138,6 +139,7 @@ const startServer = async () => {
   try {
     await mongoose.connect(MONGO_URI);
     console.log("🟢 MongoDB connected successfully");
+    await seedLevels();
     httpServer.listen(PORT, () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
     });
