@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    /* Base Options */
+    "target": "es2020",
+    "module": "commonjs",
+    "lib": ["es2020", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+
+    /* Strict Type-Checking Options */
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* Module Resolution Options */
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+
+    /* Explicitly include WebRTC types */
+    "types": ["node", "webrtc"],
+
+    /* Build Path Options */
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "tests"]
+}
