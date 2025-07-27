@@ -1,0 +1,4 @@
+.env
+/node_modules
+local_cache/
+local_cache/fast-bge-small-en-v1.5/model_optimized.onnx
