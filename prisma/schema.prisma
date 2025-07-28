@@ -43,10 +43,7 @@ model User {
   profileEmbedding   Float[]
   readMessages       Message[]           @relation("ReadByUsers", fields: [readMessageIDs], references: [id])
   readMessageIDs     String[]            @db.ObjectId
-  linkedinId         String?             @unique
-  
-  // --- [THE FIX] ---
-  // Added the missing createdAt field to track when a user is created.
+  githubId           String?             @unique
   createdAt          DateTime            @default(now())
 }
 

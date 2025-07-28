@@ -247,11 +247,10 @@ export const resetPassword = async (
   }
 };
 
-export const handleLinkedInCallback = async (
+export const handleGitHubCallback = async (
   req: Request,
   res: Response
 ): Promise<void> => {
-  // --- [FIX] Added the required return type ---
   const { code } = req.query;
 
   if (!code) {
@@ -260,54 +259,74 @@ export const handleLinkedInCallback = async (
   }
 
   try {
+    // 1. Exchange code for an access token
     const tokenResponse = await axios.post(
-      "https://www.linkedin.com/oauth/v2/accessToken",
+      "https://github.com/login/oauth/access_token",
       null,
       {
         params: {
-          grant_type: "authorization_code",
-          code: code as string,
-          client_id: process.env.LINKEDIN_CLIENT_ID,
-          client_secret: process.env.LINKEDIN_CLIENT_SECRET,
-          redirect_uri: process.env.LINKEDIN_REDIRECT_URI,
+          client_id: process.env.GITHUB_CLIENT_ID,
+          client_secret: process.env.GITHUB_CLIENT_SECRET,
+          code,
         },
         headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
         },
       }
     );
     const accessToken = tokenResponse.data.access_token;
 
-    const profileResponse = await axios.get("https://api.linkedin.com/v2/me", {
+    // 2. Fetch user's profile from GitHub
+    const userResponse = await axios.get("https://api.github.com/user", {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
     });
+    const githubUser = userResponse.data;
 
-    const linkedInData = profileResponse.data;
-    const emailResponse = await axios.get(
-      "https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))",
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+    // --- [THIS IS THE FIX] ---
+    // If the primary email is private, we need to make a second API call
+    let userEmail = githubUser.email;
+    if (!userEmail) {
+      const emailsResponse = await axios.get(
+        "https://api.github.com/user/emails",
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
+      const primaryEmail = emailsResponse.data.find(
+        (email: any) => email.primary
+      );
+      if (primaryEmail) {
+        userEmail = primaryEmail.email;
       }
-    );
-    const primaryEmail = emailResponse.data.elements[0]["handle~"].emailAddress;
+    }
 
+    if (!userEmail) {
+      res
+        .status(400)
+        .send("Error: Could not retrieve a primary email address from GitHub.");
+      return;
+    }
+    // --- END OF FIX ---
+
+    // 3. Find or create a user in your database
     let user = await prisma.user.findUnique({
-      where: { email: primaryEmail },
+      where: { email: userEmail },
     });
 
     if (!user) {
       user = await prisma.user.create({
         data: {
-          email: primaryEmail,
-          linkedinId: linkedInData.id,
+          email: userEmail,
+          githubId: githubUser.id.toString(),
           profile: {
             create: {
-              name: `${linkedInData.localizedFirstName} ${linkedInData.localizedLastName}`,
-              bio: "Profile created via LinkedIn. Please update your bio.",
+              name: githubUser.name || githubUser.login,
+              bio: githubUser.bio || "Profile created via GitHub.",
+              avatarUrl: githubUser.avatar_url,
               skills: [],
               goals: "To connect with a mentor and grow my career.",
             },
@@ -316,13 +335,13 @@ export const handleLinkedInCallback = async (
       });
     }
 
+    // 4. Generate a JWT and redirect to the frontend
     const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
       expiresIn: "1d",
     });
-
     res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${token}`);
   } catch (error) {
-    console.error("LinkedIn authentication failed:", error);
-    res.status(500).send("An error occurred during LinkedIn authentication.");
+    console.error("GitHub authentication failed:", error);
+    res.status(500).send("An error occurred during GitHub authentication.");
   }
 };

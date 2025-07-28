@@ -7,7 +7,7 @@ import {
   getMe,
   forgotPassword,
   resetPassword,
-  handleLinkedInCallback,
+  handleGitHubCallback,
 } from "../controllers/auth.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 import { body } from "express-validator";
@@ -72,13 +72,13 @@ router.get(
   }
 );
 
-// LinkedIn Auth
-router.get("/linkedin", (req, res) => {
-  const linkedInAuthUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${process.env.LINKEDIN_CLIENT_ID}&redirect_uri=${process.env.LINKEDIN_REDIRECT_URI}&scope=profile%20email%20openid`;
-  res.redirect(linkedInAuthUrl);
+// GitHub Auth
+router.get("/github", (req, res) => {
+    const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&scope=user:email`;
+    res.redirect(githubAuthUrl);
 });
 
-router.get("/linkedin/callback", handleLinkedInCallback);
+router.get("/github/callback", handleGitHubCallback);
 
 // Forgot/Reset Password Routes
 router.post(
