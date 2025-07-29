@@ -19,8 +19,11 @@ const checkUpcomingSessions = async () => {
         include: { mentor: true, mentee: true },
     });
     for (const session of sessions) {
-        await (0, email_service_1.sendReminderEmail)(session.mentor.email, session.date);
-        await (0, email_service_1.sendReminderEmail)(session.mentee.email, session.date);
+        // FIX: Add a null check to ensure both mentor and mentee exist before sending emails.
+        if (session.mentor && session.mentee) {
+            await (0, email_service_1.sendReminderEmail)(session.mentor.email, session.date);
+            await (0, email_service_1.sendReminderEmail)(session.mentee.email, session.date);
+        }
     }
 };
 exports.checkUpcomingSessions = checkUpcomingSessions;

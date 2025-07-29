@@ -365,7 +365,8 @@ const notifyMentorOfCall = async (req, res) => {
             return;
         }
         const { mentorId } = session;
-        const menteeName = session.mentee.profile?.name || "Your mentee";
+        // --- FIX: Added optional chaining (?.) to safely access the mentee relationship ---
+        const menteeName = session.mentee?.profile?.name || "Your mentee";
         const notification = await client_1.default.notification.create({
             data: {
                 userId: mentorId,

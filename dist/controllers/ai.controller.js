@@ -73,9 +73,10 @@ const getUserContext = async (userId) => {
         }
         if (sessions.length > 0) {
             const sessionStrings = sessions.map((s) => {
-                const otherPersonName = s.mentor.id === userId
-                    ? s.mentee.profile?.name
-                    : s.mentor.profile?.name;
+                // --- FIX: Added optional chaining (?.) to safely access mentor and mentee properties ---
+                const otherPersonName = s.mentor?.id === userId
+                    ? s.mentee?.profile?.name
+                    : s.mentor?.profile?.name;
                 return `- Session with ${otherPersonName || "your counterpart"} on ${s.date.toLocaleString()}`;
             });
             context += "UPCOMING SESSIONS:\n" + sessionStrings.join("\n") + "\n\n";
@@ -437,6 +438,7 @@ const summarizeTranscript = async (req, res) => {
 };
 exports.summarizeTranscript = summarizeTranscript;
 const getIcebreakers = async (req, res) => {
+    // Added the required return type
     const { mentorshipId } = req.params;
     try {
         const mentorship = await client_1.default.mentorshipRequest.findUnique({

@@ -432,7 +432,8 @@ export const notifyMentorOfCall = async (
     }
 
     const { mentorId } = session;
-    const menteeName = session.mentee.profile?.name || "Your mentee";
+    // --- FIX: Added optional chaining (?.) to safely access the mentee relationship ---
+    const menteeName = session.mentee?.profile?.name || "Your mentee";
 
     const notification = await prisma.notification.create({
       data: {

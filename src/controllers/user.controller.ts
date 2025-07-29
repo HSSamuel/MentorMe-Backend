@@ -172,36 +172,44 @@ export const getMentorStats = async (
   const { id } = req.params;
 
   try {
+    // --- FIX: Run queries concurrently without a single transaction ---
+    const menteeCountPromise = prisma.mentorshipRequest.count({
+      where: { mentorId: id, status: "ACCEPTED" },
+    });
+    const pendingRequestsPromise = prisma.mentorshipRequest.count({
+      where: { mentorId: id, status: "PENDING" },
+    });
+    const upcomingSessionsPromise = prisma.session.count({
+      where: { mentorId: id, date: { gte: new Date() } },
+    });
+    const completedSessionsPromise = prisma.session.count({
+      where: { mentorId: id, date: { lt: new Date() } },
+    });
+    const reviewAggregationPromise = prisma.review.aggregate({
+      where: {
+        mentorshipRequest: {
+          mentorId: id,
+        },
+      },
+      _avg: {
+        rating: true,
+      },
+    });
+
     const [
       menteeCount,
       pendingRequests,
       upcomingSessions,
       completedSessions,
       reviewAggregation,
-    ] = await prisma.$transaction([
-      prisma.mentorshipRequest.count({
-        where: { mentorId: id, status: "ACCEPTED" },
-      }),
-      prisma.mentorshipRequest.count({
-        where: { mentorId: id, status: "PENDING" },
-      }),
-      prisma.session.count({
-        where: { mentorId: id, date: { gte: new Date() } },
-      }),
-      prisma.session.count({
-        where: { mentorId: id, date: { lt: new Date() } },
-      }),
-      prisma.review.aggregate({
-        where: {
-          mentorshipRequest: {
-            mentorId: id,
-          },
-        },
-        _avg: {
-          rating: true,
-        },
-      }),
+    ] = await Promise.all([
+      menteeCountPromise,
+      pendingRequestsPromise,
+      upcomingSessionsPromise,
+      completedSessionsPromise,
+      reviewAggregationPromise,
     ]);
+    // --- END OF FIX ---
 
     const averageRating = reviewAggregation._avg.rating || 0;
 
@@ -228,21 +236,28 @@ export const getMenteeStats = async (
     return;
   }
   try {
+    // --- FIX: Run queries concurrently without a single transaction ---
+    const mentorCountPromise = prisma.mentorshipRequest.count({
+      where: { menteeId: userId, status: "ACCEPTED" },
+    });
+    const pendingRequestsPromise = prisma.mentorshipRequest.count({
+      where: { menteeId: userId, status: "PENDING" },
+    });
+    const upcomingSessionsPromise = prisma.session.count({
+      where: { menteeId: userId, date: { gte: new Date() } },
+    });
+    const completedSessionsPromise = prisma.session.count({
+      where: { menteeId: userId, date: { lt: new Date() } },
+    });
+
     const [mentorCount, pendingRequests, upcomingSessions, completedSessions] =
-      await prisma.$transaction([
-        prisma.mentorshipRequest.count({
-          where: { menteeId: userId, status: "ACCEPTED" },
-        }),
-        prisma.mentorshipRequest.count({
-          where: { menteeId: userId, status: "PENDING" },
-        }),
-        prisma.session.count({
-          where: { menteeId: userId, date: { gte: new Date() } },
-        }),
-        prisma.session.count({
-          where: { menteeId: userId, date: { lt: new Date() } },
-        }),
+      await Promise.all([
+        mentorCountPromise,
+        pendingRequestsPromise,
+        upcomingSessionsPromise,
+        completedSessionsPromise,
       ]);
+    // --- END OF FIX ---
 
     res.status(200).json({
       mentorCount,
@@ -441,4 +456,3 @@ export const getUserConnections = async (
     next(error); // Pass error to the global error handler
   }
 };
-// --- END OF NEW FUNCTION ---

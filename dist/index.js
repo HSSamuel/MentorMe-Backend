@@ -3,6 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+console.log(`[SERVER] Attempting to connect to DB at: ${process.env.MONGODB_URI}`);
 require("dotenv/config");
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
@@ -27,6 +28,7 @@ const notification_routes_1 = __importDefault(require("./routes/notification.rou
 const calendar_routes_1 = __importDefault(require("./routes/calendar.routes"));
 const ai_routes_1 = __importDefault(require("./routes/ai.routes"));
 const stream_routes_1 = __importDefault(require("./routes/stream.routes"));
+const community_routes_1 = __importDefault(require("./routes/community.routes"));
 const gamification_service_1 = require("./services/gamification.service");
 // Configurations and Services
 require("./config/passport");
@@ -100,6 +102,7 @@ app.use("/api/messages", message_routes_1.default);
 app.use("/api/notifications", notification_routes_1.default);
 app.use("/api/calendar", calendar_routes_1.default);
 app.use("/api/ai", ai_routes_1.default);
+app.use("/api/community", community_routes_1.default);
 app.use("/api/stream", stream_routes_1.default);
 app.get("/", (req, res) => {
     res.send("Mentor Backend API is running!");

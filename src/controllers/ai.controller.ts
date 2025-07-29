@@ -79,10 +79,11 @@ const getUserContext = async (userId: string): Promise<string> => {
 
     if (sessions.length > 0) {
       const sessionStrings = sessions.map((s) => {
+        // --- FIX: Added optional chaining (?.) to safely access mentor and mentee properties ---
         const otherPersonName =
-          s.mentor.id === userId
-            ? s.mentee.profile?.name
-            : s.mentor.profile?.name;
+          s.mentor?.id === userId
+            ? s.mentee?.profile?.name
+            : s.mentor?.profile?.name;
         return `- Session with ${
           otherPersonName || "your counterpart"
         } on ${s.date.toLocaleString()}`;
@@ -517,7 +518,8 @@ export const summarizeTranscript = async (
 export const getIcebreakers = async (
   req: Request,
   res: Response
-): Promise<void> => { // Added the required return type
+): Promise<void> => {
+  // Added the required return type
   const { mentorshipId } = req.params;
 
   try {
@@ -544,7 +546,7 @@ export const getIcebreakers = async (
       - Skills: ${menteeProfile.skills.join(", ")}
       - Goals: ${menteeProfile.goals}
     `;
-    
+
     // Replaced the incorrect 'openai' variable with the correct 'genAI'
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const result = await model.generateContent(prompt);

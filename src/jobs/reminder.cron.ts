@@ -16,8 +16,11 @@ export const checkUpcomingSessions = async () => {
   });
 
   for (const session of sessions) {
-    await sendReminderEmail(session.mentor.email, session.date);
-    await sendReminderEmail(session.mentee.email, session.date);
+    // FIX: Add a null check to ensure both mentor and mentee exist before sending emails.
+    if (session.mentor && session.mentee) {
+      await sendReminderEmail(session.mentor.email, session.date);
+      await sendReminderEmail(session.mentee.email, session.date);
+    }
   }
 };
 

@@ -14,6 +14,30 @@ model Level {
   users   User[]
 }
 
+model ForumPost {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  title     String
+  content   String
+  authorId  String   @db.ObjectId
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author   User           @relation(fields: [authorId], references: [id])
+  comments ForumComment[]
+}
+
+model ForumComment {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  content   String
+  postId    String   @db.ObjectId
+  authorId  String   @db.ObjectId
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post   ForumPost @relation(fields: [postId], references: [id])
+  author User      @relation(fields: [authorId], references: [id])
+}
+
 model User {
   id                 String              @id @default(auto()) @map("_id") @db.ObjectId
   email              String              @unique
@@ -45,6 +69,8 @@ model User {
   readMessageIDs     String[]            @db.ObjectId
   githubId           String?             @unique
   createdAt          DateTime            @default(now())
+  posts              ForumPost[]
+  comments           ForumComment[]
 }
 
 model Profile {
@@ -91,15 +117,15 @@ model SessionInsight {
 }
 
 model Session {
-  id         String          @id @default(auto()) @map("_id") @db.ObjectId
-  mentorId   String          @db.ObjectId
-  menteeId   String          @db.ObjectId
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  mentorId   String    @db.ObjectId
+  menteeId   String    @db.ObjectId
   date       DateTime
   rating     Int?
   feedback   String?
-  mentor     User            @relation("MentorSessions", fields: [mentorId], references: [id])
-  mentee     User            @relation("MenteeSessions", fields: [menteeId], references: [id])
-  createdAt  DateTime        @default(now())
+  mentor     User?     @relation("MentorSessions", fields: [mentorId], references: [id])
+  mentee     User?     @relation("MenteeSessions", fields: [menteeId], references: [id])
+  createdAt  DateTime  @default(now())
   insights   SessionInsight?
 
   @@index([mentorId, date])

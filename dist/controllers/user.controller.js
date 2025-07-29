@@ -152,30 +152,37 @@ exports.getAvailableSkills = getAvailableSkills;
 const getMentorStats = async (req, res) => {
     const { id } = req.params;
     try {
-        const [menteeCount, pendingRequests, upcomingSessions, completedSessions, reviewAggregation,] = await client_1.default.$transaction([
-            client_1.default.mentorshipRequest.count({
-                where: { mentorId: id, status: "ACCEPTED" },
-            }),
-            client_1.default.mentorshipRequest.count({
-                where: { mentorId: id, status: "PENDING" },
-            }),
-            client_1.default.session.count({
-                where: { mentorId: id, date: { gte: new Date() } },
-            }),
-            client_1.default.session.count({
-                where: { mentorId: id, date: { lt: new Date() } },
-            }),
-            client_1.default.review.aggregate({
-                where: {
-                    mentorshipRequest: {
-                        mentorId: id,
-                    },
+        // --- FIX: Run queries concurrently without a single transaction ---
+        const menteeCountPromise = client_1.default.mentorshipRequest.count({
+            where: { mentorId: id, status: "ACCEPTED" },
+        });
+        const pendingRequestsPromise = client_1.default.mentorshipRequest.count({
+            where: { mentorId: id, status: "PENDING" },
+        });
+        const upcomingSessionsPromise = client_1.default.session.count({
+            where: { mentorId: id, date: { gte: new Date() } },
+        });
+        const completedSessionsPromise = client_1.default.session.count({
+            where: { mentorId: id, date: { lt: new Date() } },
+        });
+        const reviewAggregationPromise = client_1.default.review.aggregate({
+            where: {
+                mentorshipRequest: {
+                    mentorId: id,
                 },
-                _avg: {
-                    rating: true,
-                },
-            }),
+            },
+            _avg: {
+                rating: true,
+            },
+        });
+        const [menteeCount, pendingRequests, upcomingSessions, completedSessions, reviewAggregation,] = await Promise.all([
+            menteeCountPromise,
+            pendingRequestsPromise,
+            upcomingSessionsPromise,
+            completedSessionsPromise,
+            reviewAggregationPromise,
         ]);
+        // --- END OF FIX ---
         const averageRating = reviewAggregation._avg.rating || 0;
         res.status(200).json({
             menteeCount,
@@ -198,20 +205,26 @@ const getMenteeStats = async (req, res) => {
         return;
     }
     try {
-        const [mentorCount, pendingRequests, upcomingSessions, completedSessions] = await client_1.default.$transaction([
-            client_1.default.mentorshipRequest.count({
-                where: { menteeId: userId, status: "ACCEPTED" },
-            }),
-            client_1.default.mentorshipRequest.count({
-                where: { menteeId: userId, status: "PENDING" },
-            }),
-            client_1.default.session.count({
-                where: { menteeId: userId, date: { gte: new Date() } },
-            }),
-            client_1.default.session.count({
-                where: { menteeId: userId, date: { lt: new Date() } },
-            }),
+        // --- FIX: Run queries concurrently without a single transaction ---
+        const mentorCountPromise = client_1.default.mentorshipRequest.count({
+            where: { menteeId: userId, status: "ACCEPTED" },
+        });
+        const pendingRequestsPromise = client_1.default.mentorshipRequest.count({
+            where: { menteeId: userId, status: "PENDING" },
+        });
+        const upcomingSessionsPromise = client_1.default.session.count({
+            where: { menteeId: userId, date: { gte: new Date() } },
+        });
+        const completedSessionsPromise = client_1.default.session.count({
+            where: { menteeId: userId, date: { lt: new Date() } },
+        });
+        const [mentorCount, pendingRequests, upcomingSessions, completedSessions] = await Promise.all([
+            mentorCountPromise,
+            pendingRequestsPromise,
+            upcomingSessionsPromise,
+            completedSessionsPromise,
         ]);
+        // --- END OF FIX ---
         res.status(200).json({
             mentorCount,
             pendingRequests,
@@ -383,4 +396,3 @@ const getUserConnections = async (req, res, next) => {
     }
 };
 exports.getUserConnections = getUserConnections;
-// --- END OF NEW FUNCTION ---
