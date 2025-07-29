@@ -39,38 +39,39 @@ model ForumComment {
 }
 
 model User {
-  id                 String              @id @default(auto()) @map("_id") @db.ObjectId
-  email              String              @unique
-  password           String?
-  role               Role                @default(MENTEE)
-  googleId           String?             @unique // Ensure this is unique if you use it for logins
-  facebookId         String?             @unique // Ensure this is unique if you use it for logins
-  profile            Profile?
-  sentRequests       MentorshipRequest[] @relation("MenteeRequests")
-  receivedRequests   MentorshipRequest[] @relation("MentorRequests")
-  mentorSessions     Session[]           @relation("MentorSessions")
-  menteeSessions     Session[]           @relation("MenteeSessions")
-  sentMessages       Message[]           @relation("SentMessages")
-  notifications      Notification[]
-  availabilities     Availability[]
-  aiConversations    AIConversation[]
-  googleAccessToken  String?
-  googleRefreshToken String?
-  passwordResetToken String?
+  id                   String                @id @default(auto()) @map("_id") @db.ObjectId
+  email                String                @unique
+  password             String?
+  role                 Role                  @default(MENTEE)
+  googleId             String?               @unique
+  facebookId           String?               @unique
+  profile              Profile?
+  sentRequests         MentorshipRequest[]   @relation("MenteeRequests")
+  receivedRequests     MentorshipRequest[]   @relation("MentorRequests")
+  mentorSessions       Session[]             @relation("MentorSessions")
+  menteeSessions       Session[]             @relation("MenteeSessions")
+  sentMessages         Message[]             @relation("SentMessages")
+  notifications        Notification[]
+  availabilities       Availability[]
+  aiConversations      AIConversation[]
+  googleAccessToken    String?
+  googleRefreshToken   String?
+  passwordResetToken   String?
   passwordResetExpires DateTime?
-  conversations      Conversation[]      @relation(fields: [conversationIDs], references: [id])
-  conversationIDs    String[]            @db.ObjectId
-  points             Int                 @default(0)
-  levelId            String?             @db.ObjectId
-  level              Level?              @relation(fields: [levelId], references: [id])
-  lastSeen           DateTime            @default(now()) @updatedAt
-  profileEmbedding   Float[]
-  readMessages       Message[]           @relation("ReadByUsers", fields: [readMessageIDs], references: [id])
-  readMessageIDs     String[]            @db.ObjectId
-  githubId           String?             @unique
-  createdAt          DateTime            @default(now())
-  posts              ForumPost[]
-  comments           ForumComment[]
+  conversations        Conversation[]        @relation(fields: [conversationIDs], references: [id])
+  conversationIDs      String[]              @db.ObjectId
+  points               Int                   @default(0)
+  levelId              String?               @db.ObjectId
+  level                Level?                @relation(fields: [levelId], references: [id])
+  lastSeen             DateTime              @default(now()) @updatedAt
+  profileEmbedding     Float[]
+  readMessages         Message[]             @relation("ReadByUsers", fields: [readMessageIDs], references: [id])
+  readMessageIDs       String[]              @db.ObjectId
+  githubId             String?               @unique
+  createdAt            DateTime              @default(now())
+  posts                ForumPost[]
+  comments             ForumComment[]
+  sessionParticipations SessionParticipant[] // Relation to group sessions a user has joined
 }
 
 model Profile {
@@ -86,19 +87,19 @@ model Profile {
 }
 
 model MentorshipRequest {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  mentorId  String   @db.ObjectId
-  menteeId  String   @db.ObjectId
-  status    String   @default("PENDING")
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  mentorId  String    @db.ObjectId
+  menteeId  String    @db.ObjectId
+  status    String    @default("PENDING")
   message   String
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
   updatedAt DateTime? @updatedAt
 
   // Relationships
   mentor  User     @relation("MentorRequests", fields: [mentorId], references: [id])
   mentee  User     @relation("MenteeRequests", fields: [menteeId], references: [id])
   reviews Review[]
-  goals   Goal[]   // Added the missing relation to Goal
+  goals   Goal[]
 
   // Indexes
   @@index([mentorId, status])
@@ -106,30 +107,47 @@ model MentorshipRequest {
 }
 
 model SessionInsight {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  sessionId String   @unique @db.ObjectId
-  summary   String
-  keyTopics String[]
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId   String   @unique @db.ObjectId
+  summary     String
+  keyTopics   String[]
   actionItems String[]
-  createdAt DateTime @default(now())
+  createdAt   DateTime @default(now())
 
   session Session @relation(fields: [sessionId], references: [id])
 }
 
 model Session {
-  id         String    @id @default(auto()) @map("_id") @db.ObjectId
-  mentorId   String    @db.ObjectId
-  menteeId   String    @db.ObjectId
-  date       DateTime
-  rating     Int?
-  feedback   String?
-  mentor     User?     @relation("MentorSessions", fields: [mentorId], references: [id])
-  mentee     User?     @relation("MenteeSessions", fields: [menteeId], references: [id])
-  createdAt  DateTime  @default(now())
-  insights   SessionInsight?
+  id              String               @id @default(auto()) @map("_id") @db.ObjectId
+  mentorId        String               @db.ObjectId
+  menteeId        String?              @db.ObjectId // Optional for group sessions
+  date            DateTime
+  rating          Int?
+  feedback        String?
+  mentor          User                 @relation("MentorSessions", fields: [mentorId], references: [id])
+  mentee          User?                @relation("MenteeSessions", fields: [menteeId], references: [id]) // Optional for group sessions
+  createdAt       DateTime             @default(now())
+  insights        SessionInsight?
+  isGroupSession  Boolean              @default(false) // New field for group sessions
+  topic           String?              // New field for group session topic
+  maxParticipants Int?                 // New field for max number of mentees
+  participants    SessionParticipant[] // New relation for group session participants
 
   @@index([mentorId, date])
   @@index([menteeId, date])
+}
+
+// New model to handle many-to-many relationship for group sessions
+model SessionParticipant {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId String   @db.ObjectId
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  menteeId  String   @db.ObjectId
+  mentee    User     @relation(fields: [menteeId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([sessionId, menteeId])
+  @@index([menteeId])
 }
 
 model Review {
@@ -183,12 +201,12 @@ model Availability {
 }
 
 model Conversation {
-  id             String    @id @default(auto()) @map("_id") @db.ObjectId
-  participants   User[]    @relation(fields: [participantIDs], references: [id])
-  participantIDs String[]  @db.ObjectId
-  messages       Message[]
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  participants    User[]    @relation(fields: [participantIDs], references: [id])
+  participantIDs  String[]  @db.ObjectId
+  messages        Message[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
   streamChannelId String?   @unique
 }
 
@@ -205,13 +223,13 @@ model Message {
 }
 
 model AIConversation {
-  id         String      @id @default(auto()) @map("_id") @db.ObjectId
-  userId     String      @db.ObjectId
-  user       User        @relation(fields: [userId], references: [id])
-  title      String
-  messages   AIMessage[]
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  id        String      @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String      @db.ObjectId
+  user      User        @relation(fields: [userId], references: [id])
+  title     String
+  messages  AIMessage[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 }
 
 model AIMessage {

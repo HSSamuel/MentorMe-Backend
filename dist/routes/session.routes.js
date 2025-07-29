@@ -17,6 +17,27 @@ router.post("/", auth_middleware_1.authMiddleware, auth_middleware_1.menteeMiddl
     (0, express_validator_1.body)("mentorId").isMongoId().withMessage("Invalid mentor ID"),
     (0, express_validator_1.body)("sessionTime").isISO8601().withMessage("Invalid session time"),
 ], validateRequest_1.validateRequest, session_controller_1.createSession);
+// --- NEW ROUTES FOR GROUP SESSIONS (MENTORING CIRCLES) ---
+// Mentor: Create a new group session
+router.post("/group", auth_middleware_1.authMiddleware, auth_middleware_1.mentorMiddleware, [
+    (0, express_validator_1.body)("sessionTime").isISO8601().withMessage("Invalid session time"),
+    (0, express_validator_1.body)("topic").isString().notEmpty().withMessage("Topic is required"),
+    (0, express_validator_1.body)("maxParticipants")
+        .isInt({ min: 2, max: 10 })
+        .withMessage("Max participants must be between 2 and 10"),
+    (0, express_validator_1.body)("isGroupSession").custom((value) => {
+        if (value !== true) {
+            throw new Error("isGroupSession must be true for this route");
+        }
+        return true;
+    }),
+], validateRequest_1.validateRequest, session_controller_1.createSession // The same controller function handles this logic
+);
+// GET: All available group sessions for mentees to browse
+router.get("/group", auth_middleware_1.authMiddleware, session_controller_1.getGroupSessions);
+// POST: Mentee joins a specific group session
+router.post("/:sessionId/join", auth_middleware_1.authMiddleware, auth_middleware_1.menteeMiddleware, [(0, express_validator_1.param)("sessionId").isMongoId().withMessage("Invalid session ID")], validateRequest_1.validateRequest, session_controller_1.joinGroupSession);
+// --- END OF GROUP SESSION ROUTES ---
 // Get all sessions where the current user is the mentor
 router.get("/mentor", auth_middleware_1.authMiddleware, auth_middleware_1.mentorMiddleware, session_controller_1.getMentorSessions);
 // Get all sessions where the current user is the mentee
@@ -34,9 +55,10 @@ router.put("/:id/feedback", auth_middleware_1.authMiddleware, [
         .withMessage("Comment must be a string"),
 ], validateRequest_1.validateRequest, session_controller_1.submitFeedback);
 router.post("/:sessionId/call-token", auth_middleware_1.authMiddleware, [(0, express_validator_1.param)("sessionId").isMongoId().withMessage("Invalid session ID")], validateRequest_1.validateRequest, session_controller_1.generateVideoCallToken);
-// Mentee calls this endpoint to notify the mentor they are in the video call
-router.post("/:sessionId/notify-call", auth_middleware_1.authMiddleware, auth_middleware_1.menteeMiddleware, // Ensures only the mentee can trigger this
-[(0, express_validator_1.param)("sessionId").isMongoId().withMessage("Invalid session ID")], validateRequest_1.validateRequest, session_controller_1.notifyMentorOfCall);
+// --- FIX: Allow any authenticated user to notify, not just mentees ---
+router.post("/:sessionId/notify-call", auth_middleware_1.authMiddleware, // Removed menteeMiddleware
+[(0, express_validator_1.param)("sessionId").isMongoId().withMessage("Invalid session ID")], validateRequest_1.validateRequest, session_controller_1.notifyParticipantsOfCall // <-- FIX: Use the new function name
+);
 // --- ROUTES FOR SESSION INSIGHTS ---
 // POST: Any authenticated user (mentor or mentee) can create insights after a call
 router.post("/:sessionId/insights", auth_middleware_1.authMiddleware, [

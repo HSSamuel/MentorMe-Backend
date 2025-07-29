@@ -8,10 +8,12 @@ import {
   getMenteeSessions,
   submitFeedback,
   generateVideoCallToken,
-  notifyMentorOfCall,
+  notifyParticipantsOfCall, // <-- FIX: Renamed from notifyMentorOfCall
   createSessionInsights,
   getSessionInsights,
   getSessionDetails,
+  getGroupSessions,
+  joinGroupSession,
 } from "../controllers/session.controller";
 import {
   authMiddleware,
@@ -63,6 +65,45 @@ router.post(
   createSession
 );
 
+// --- NEW ROUTES FOR GROUP SESSIONS (MENTORING CIRCLES) ---
+
+// Mentor: Create a new group session
+router.post(
+  "/group",
+  authMiddleware,
+  mentorMiddleware,
+  [
+    body("sessionTime").isISO8601().withMessage("Invalid session time"),
+    body("topic").isString().notEmpty().withMessage("Topic is required"),
+    body("maxParticipants")
+      .isInt({ min: 2, max: 10 })
+      .withMessage("Max participants must be between 2 and 10"),
+    body("isGroupSession").custom((value) => {
+      if (value !== true) {
+        throw new Error("isGroupSession must be true for this route");
+      }
+      return true;
+    }),
+  ],
+  validateRequest,
+  createSession // The same controller function handles this logic
+);
+
+// GET: All available group sessions for mentees to browse
+router.get("/group", authMiddleware, getGroupSessions);
+
+// POST: Mentee joins a specific group session
+router.post(
+  "/:sessionId/join",
+  authMiddleware,
+  menteeMiddleware,
+  [param("sessionId").isMongoId().withMessage("Invalid session ID")],
+  validateRequest,
+  joinGroupSession
+);
+
+// --- END OF GROUP SESSION ROUTES ---
+
 // Get all sessions where the current user is the mentor
 router.get("/mentor", authMiddleware, mentorMiddleware, getMentorSessions);
 
@@ -96,14 +137,13 @@ router.post(
   generateVideoCallToken
 );
 
-// Mentee calls this endpoint to notify the mentor they are in the video call
+// --- FIX: Allow any authenticated user to notify, not just mentees ---
 router.post(
   "/:sessionId/notify-call",
-  authMiddleware,
-  menteeMiddleware, // Ensures only the mentee can trigger this
+  authMiddleware, // Removed menteeMiddleware
   [param("sessionId").isMongoId().withMessage("Invalid session ID")],
   validateRequest,
-  notifyMentorOfCall
+  notifyParticipantsOfCall // <-- FIX: Use the new function name
 );
 
 // --- ROUTES FOR SESSION INSIGHTS ---

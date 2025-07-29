@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSessionDetails = exports.getSessionInsights = exports.createSessionInsights = exports.notifyMentorOfCall = exports.generateVideoCallToken = exports.submitFeedback = exports.getMenteeSessions = exports.getMentorSessions = exports.createSession = exports.setAvailability = exports.getMentorAvailability = exports.getAvailability = void 0;
+exports.getSessionDetails = exports.getSessionInsights = exports.createSessionInsights = exports.notifyParticipantsOfCall = exports.generateVideoCallToken = exports.submitFeedback = exports.getMenteeSessions = exports.getMentorSessions = exports.getGroupSessions = exports.joinGroupSession = exports.createSession = exports.setAvailability = exports.getMentorAvailability = exports.getAvailability = void 0;
 const calendar_service_1 = require("../services/calendar.service");
 const getUserId_1 = require("../utils/getUserId");
 const gamification_service_1 = require("../services/gamification.service");
@@ -148,76 +148,168 @@ const setAvailability = async (req, res) => {
 };
 exports.setAvailability = setAvailability;
 const createSession = async (req, res) => {
+    const userId = (0, getUserId_1.getUserId)(req);
+    const userRole = getUserRole(req);
+    if (!userId) {
+        res.status(401).json({ message: "Authentication error" });
+        return;
+    }
+    const { mentorId, menteeId, sessionTime, isGroupSession, topic, maxParticipants, } = req.body;
+    try {
+        if (userRole === "MENTOR" && isGroupSession) {
+            const newSession = await client_1.default.session.create({
+                data: {
+                    mentorId: userId,
+                    date: new Date(sessionTime),
+                    isGroupSession: true,
+                    topic,
+                    maxParticipants: parseInt(maxParticipants, 10),
+                },
+            });
+            res.status(201).json(newSession);
+            return;
+        }
+        if (userRole === "MENTEE") {
+            const match = await client_1.default.mentorshipRequest.findFirst({
+                where: { menteeId: userId, mentorId, status: "ACCEPTED" },
+            });
+            if (!match) {
+                res
+                    .status(403)
+                    .json({ message: "You are not matched with this mentor." });
+                return;
+            }
+            const newSession = await client_1.default.session.create({
+                data: {
+                    menteeId: userId,
+                    mentorId,
+                    date: new Date(sessionTime),
+                    isGroupSession: false,
+                },
+            });
+            const mentee = await client_1.default.user.findUnique({
+                where: { id: userId },
+                include: { profile: true },
+            });
+            await client_1.default.notification.create({
+                data: {
+                    userId: mentorId,
+                    type: "SESSION_BOOKED",
+                    message: `${mentee?.profile?.name || "A mentee"} has booked a session with you.`,
+                    link: "/my-sessions",
+                },
+            });
+            try {
+                const mentor = await client_1.default.user.findUnique({
+                    where: { id: mentorId },
+                });
+                if (mentor && mentee) {
+                    const eventDetails = {
+                        summary: `Mentorship Session: ${mentor.email} & ${mentee.email}`,
+                        description: "Your mentorship session booked via the MentorMe Platform.",
+                        start: new Date(sessionTime),
+                        end: new Date(new Date(sessionTime).getTime() + 60 * 60 * 1000),
+                        attendees: [mentor.email, mentee.email],
+                    };
+                    if (mentor.googleRefreshToken)
+                        await (0, calendar_service_1.createCalendarEvent)(mentor.id, eventDetails);
+                    if (mentee.googleRefreshToken)
+                        await (0, calendar_service_1.createCalendarEvent)(mentee.id, eventDetails);
+                }
+            }
+            catch (calendarError) {
+                console.error("Could not create calendar event:", calendarError);
+            }
+            const io = req.app.locals.io;
+            if (io) {
+                const sessionWithDetails = await client_1.default.session.findUnique({
+                    where: { id: newSession.id },
+                    include: {
+                        mentor: { select: { profile: true } },
+                        mentee: { select: { profile: true } },
+                    },
+                });
+                io.to("admin-room").emit("newSession", sessionWithDetails);
+            }
+            res.status(201).json(newSession);
+            return;
+        }
+        res.status(400).json({ message: "Invalid request to create session." });
+    }
+    catch (error) {
+        console.error("Error creating session:", error);
+        res.status(500).json({ message: "Error creating session." });
+    }
+};
+exports.createSession = createSession;
+const joinGroupSession = async (req, res) => {
     const menteeId = (0, getUserId_1.getUserId)(req);
+    const { sessionId } = req.params;
     if (!menteeId) {
         res.status(401).json({ message: "Authentication error" });
         return;
     }
-    const { mentorId, sessionTime } = req.body;
     try {
-        const match = await client_1.default.mentorshipRequest.findFirst({
-            where: { menteeId, mentorId, status: "ACCEPTED" },
+        const session = await client_1.default.session.findUnique({
+            where: { id: sessionId },
+            include: { participants: true },
         });
-        if (!match) {
-            res
-                .status(403)
-                .json({ message: "You are not matched with this mentor." });
+        if (!session || !session.isGroupSession) {
+            res.status(404).json({ message: "Group session not found." });
             return;
         }
-        const newSession = await client_1.default.session.create({
-            data: { menteeId, mentorId, date: new Date(sessionTime) },
+        if (session.maxParticipants &&
+            session.participants.length >= session.maxParticipants) {
+            res.status(400).json({ message: "This session is already full." });
+            return;
+        }
+        const existingParticipant = await client_1.default.sessionParticipant.findFirst({
+            where: { sessionId, menteeId },
         });
-        const mentee = await client_1.default.user.findUnique({
-            where: { id: menteeId },
-            include: { profile: true },
-        });
-        await client_1.default.notification.create({
+        if (existingParticipant) {
+            res
+                .status(400)
+                .json({ message: "You have already joined this session." });
+            return;
+        }
+        await client_1.default.sessionParticipant.create({
             data: {
-                userId: mentorId,
-                type: "SESSION_BOOKED",
-                message: `${mentee?.profile?.name || "A mentee"} has booked a session with you.`,
-                link: "/my-sessions",
+                sessionId,
+                menteeId,
             },
         });
-        try {
-            const mentor = await client_1.default.user.findUnique({ where: { id: mentorId } });
-            if (mentor && mentee) {
-                const eventDetails = {
-                    summary: `Mentorship Session: ${mentor.email} & ${mentee.email}`,
-                    description: "Your mentorship session booked via the MentorMe Platform.",
-                    start: new Date(sessionTime),
-                    end: new Date(new Date(sessionTime).getTime() + 60 * 60 * 1000),
-                    attendees: [mentor.email, mentee.email],
-                };
-                if (mentor.googleRefreshToken)
-                    await (0, calendar_service_1.createCalendarEvent)(mentor.id, eventDetails);
-                if (mentee.googleRefreshToken)
-                    await (0, calendar_service_1.createCalendarEvent)(mentee.id, eventDetails);
-            }
-        }
-        catch (calendarError) {
-            console.error("Could not create calendar event:", calendarError);
-        }
-        // --- [REAL-TIME UPDATE] ---
-        // After creating a session, emit an event to the admin room.
-        const io = req.app.locals.io;
-        if (io) {
-            const sessionWithDetails = await client_1.default.session.findUnique({
-                where: { id: newSession.id },
-                include: {
-                    mentor: { select: { profile: true } },
-                    mentee: { select: { profile: true } },
-                },
-            });
-            io.to("admin-room").emit("newSession", sessionWithDetails);
-        }
-        res.status(201).json(newSession);
+        res.status(200).json({ message: "Successfully joined the session." });
     }
     catch (error) {
-        res.status(500).json({ message: "Error booking session." });
+        console.error("Error joining group session:", error);
+        res.status(500).json({ message: "Error joining group session." });
     }
 };
-exports.createSession = createSession;
+exports.joinGroupSession = joinGroupSession;
+const getGroupSessions = async (req, res) => {
+    try {
+        const sessions = await client_1.default.session.findMany({
+            where: {
+                isGroupSession: true,
+                date: { gte: new Date() },
+            },
+            include: {
+                mentor: { include: { profile: true } },
+                _count: {
+                    select: { participants: true },
+                },
+            },
+            orderBy: { date: "asc" },
+        });
+        const availableSessions = sessions.filter((s) => !s.maxParticipants || s._count.participants < s.maxParticipants);
+        res.status(200).json(availableSessions);
+    }
+    catch (error) {
+        console.error("Error fetching group sessions:", error);
+        res.status(500).json({ message: "Error fetching group sessions." });
+    }
+};
+exports.getGroupSessions = getGroupSessions;
 const getMentorSessions = async (req, res) => {
     const mentorId = (0, getUserId_1.getUserId)(req);
     if (!mentorId) {
@@ -227,7 +319,10 @@ const getMentorSessions = async (req, res) => {
     try {
         const sessions = await client_1.default.session.findMany({
             where: { mentorId },
-            include: { mentee: { include: { profile: true } } },
+            include: {
+                mentee: { include: { profile: true } },
+                participants: { include: { mentee: { include: { profile: true } } } },
+            },
             orderBy: { date: "asc" },
         });
         res.status(200).json(sessions);
@@ -244,14 +339,31 @@ const getMenteeSessions = async (req, res) => {
         return;
     }
     try {
-        const sessions = await client_1.default.session.findMany({
-            where: { menteeId },
+        const oneOnOneSessions = await client_1.default.session.findMany({
+            where: { menteeId, isGroupSession: false },
             include: { mentor: { include: { profile: true } } },
-            orderBy: { date: "asc" },
         });
-        res.status(200).json(sessions);
+        const groupSessionParticipations = await client_1.default.sessionParticipant.findMany({
+            where: { menteeId },
+            include: {
+                session: {
+                    include: {
+                        mentor: { include: { profile: true } },
+                        participants: {
+                            include: { mentee: { include: { profile: true } } },
+                        },
+                    },
+                },
+            },
+        });
+        const groupSessions = groupSessionParticipations
+            .filter((p) => p.session)
+            .map((p) => p.session);
+        const allSessions = [...oneOnOneSessions, ...groupSessions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        res.status(200).json(allSessions);
     }
     catch (error) {
+        console.error("Error fetching mentee sessions:", error);
         res.status(500).json({ message: "Error fetching sessions." });
     }
 };
@@ -283,10 +395,7 @@ const submitFeedback = async (req, res) => {
             where: { id },
             data: dataToUpdate,
         });
-        // Award 10 points for submitting feedback
         await (0, gamification_service_1.awardPoints)(userId, 10);
-        // --- [REAL-TIME UPDATE] ---
-        // After updating a session, emit an event to the admin room.
         const io = req.app.locals.io;
         if (io) {
             const sessionWithDetails = await client_1.default.session.findUnique({
@@ -317,13 +426,18 @@ const generateVideoCallToken = async (req, res) => {
         return;
     }
     try {
-        const session = await client_1.default.session.findFirst({
-            where: {
-                id: sessionId,
-                OR: [{ menteeId: userId }, { mentorId: userId }],
-            },
+        const session = await client_1.default.session.findUnique({
+            where: { id: sessionId },
+            include: { participants: true },
         });
         if (!session) {
+            res.status(404).json({ message: "Session not found." });
+            return;
+        }
+        const isParticipant = session.mentorId === userId ||
+            session.menteeId === userId ||
+            session.participants.some((p) => p.menteeId === userId);
+        if (!isParticipant) {
             res
                 .status(403)
                 .json({ message: "You are not a participant of this session." });
@@ -344,10 +458,11 @@ const generateVideoCallToken = async (req, res) => {
     }
 };
 exports.generateVideoCallToken = generateVideoCallToken;
-const notifyMentorOfCall = async (req, res) => {
-    const menteeId = (0, getUserId_1.getUserId)(req);
+// --- FIX: Renamed and updated logic to handle all participants ---
+const notifyParticipantsOfCall = async (req, res) => {
+    const callerId = (0, getUserId_1.getUserId)(req);
     const { sessionId } = req.params;
-    if (!menteeId) {
+    if (!callerId) {
         res.status(401).json({ message: "Authentication error" });
         return;
     }
@@ -355,43 +470,67 @@ const notifyMentorOfCall = async (req, res) => {
         const session = await client_1.default.session.findUnique({
             where: { id: sessionId },
             include: {
-                mentee: { include: { profile: true } },
+                participants: { include: { mentee: { include: { profile: true } } } },
+                mentor: { include: { profile: true } },
+                mentee: { include: { profile: true } }, // For 1-on-1
             },
         });
-        if (!session || session.menteeId !== menteeId) {
-            res
-                .status(403)
-                .json({ message: "You are not the mentee for this session." });
+        if (!session) {
+            res.status(404).json({ message: "Session not found." });
             return;
         }
-        const { mentorId } = session;
-        // --- FIX: Added optional chaining (?.) to safely access the mentee relationship ---
-        const menteeName = session.mentee?.profile?.name || "Your mentee";
-        const notification = await client_1.default.notification.create({
-            data: {
-                userId: mentorId,
-                type: "VIDEO_CALL_INITIATED",
-                message: `${menteeName} is calling you for your session.`,
-                link: `/session/${sessionId}/call`,
-                isRead: false,
-            },
+        const callerIsParticipant = session.mentorId === callerId ||
+            session.menteeId === callerId ||
+            session.participants.some((p) => p.menteeId === callerId);
+        if (!callerIsParticipant) {
+            res
+                .status(403)
+                .json({ message: "You are not a participant of this session." });
+            return;
+        }
+        const caller = session.mentorId === callerId
+            ? session.mentor
+            : session.participants.find((p) => p.menteeId === callerId)?.mentee ||
+                session.mentee;
+        const callerName = caller?.profile?.name || "A participant";
+        const notificationMessage = `${callerName} is calling for your session.`;
+        const link = `/session/${sessionId}/call`;
+        const recipientIds = [];
+        if (session.mentorId !== callerId) {
+            recipientIds.push(session.mentorId);
+        }
+        if (session.menteeId && session.menteeId !== callerId) {
+            recipientIds.push(session.menteeId);
+        }
+        session.participants.forEach((p) => {
+            if (p.menteeId !== callerId) {
+                recipientIds.push(p.menteeId);
+            }
         });
         const io = req.app.locals.io;
-        if (io) {
-            io.to(mentorId).emit("newNotification", notification);
+        for (const userId of recipientIds) {
+            const notification = await client_1.default.notification.create({
+                data: {
+                    userId,
+                    type: "VIDEO_CALL_INITIATED",
+                    message: notificationMessage,
+                    link,
+                    isRead: false,
+                },
+            });
+            if (io) {
+                io.to(userId).emit("newNotification", notification);
+            }
         }
-        else {
-            console.warn("Socket.IO not initialized, skipping notification emit.");
-        }
-        console.log(`Notification sent to mentor ${mentorId} for video call.`);
-        res.status(200).json({ message: "Notification sent successfully." });
+        console.log(`Notification sent to ${recipientIds.length} participant(s) for video call.`);
+        res.status(200).json({ message: "Notifications sent successfully." });
     }
     catch (error) {
         console.error("Error sending call notification:", error);
         res.status(500).json({ message: "Failed to send notification." });
     }
 };
-exports.notifyMentorOfCall = notifyMentorOfCall;
+exports.notifyParticipantsOfCall = notifyParticipantsOfCall;
 const createSessionInsights = async (req, res) => {
     if (!genAI || !cohere) {
         res.status(500).json({ message: "AI services are not configured." });
@@ -421,8 +560,8 @@ const createSessionInsights = async (req, res) => {
                 .json({ message: "You are not a participant of this session." });
             return;
         }
-        const summaryPrompt = `Based on the following transcript...`; // Your prompt here
-        const actionItemsPrompt = `Analyze the following transcript...`; // Your prompt here
+        const summaryPrompt = `Based on the following transcript...`;
+        const actionItemsPrompt = `Analyze the following transcript...`;
         const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const [summaryResponse, actionItemsResponse] = await Promise.all([
             geminiModel.generateContent(summaryPrompt),
@@ -462,7 +601,7 @@ const getSessionInsights = async (req, res) => {
         const session = await client_1.default.session.findUnique({
             where: { id: sessionId },
             include: {
-                insights: true, // Include the related insights
+                insights: true,
                 mentor: { select: { profile: true } },
                 mentee: { select: { profile: true } },
             },
@@ -471,7 +610,6 @@ const getSessionInsights = async (req, res) => {
             res.status(404).json({ message: "Session not found." });
             return;
         }
-        // Security check: Ensure the current user is part of the session
         if (session.mentorId !== userId && session.menteeId !== userId) {
             res
                 .status(403)
@@ -495,11 +633,18 @@ const getSessionDetails = async (req, res) => {
             include: {
                 mentor: { include: { profile: true } },
                 mentee: { include: { profile: true } },
+                participants: { include: { mentee: { include: { profile: true } } } },
             },
         });
-        if (!session ||
-            (session.mentorId !== userId && session.menteeId !== userId)) {
+        if (!session) {
             res.status(404).json({ message: "Session not found or access denied." });
+            return;
+        }
+        const isParticipant = session.mentorId === userId ||
+            session.menteeId === userId ||
+            session.participants.some((p) => p.menteeId === userId);
+        if (!isParticipant) {
+            res.status(403).json({ message: "Access denied." });
             return;
         }
         res.status(200).json(session);
