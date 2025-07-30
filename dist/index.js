@@ -3,9 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-// --- FIX: "dotenv/config" must be the very first import to load environment variables ---
 require("dotenv/config");
-console.log(`[SERVER] Attempting to connect to DB at: ${process.env.MONGODB_URI}`);
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const mongoose_1 = __importDefault(require("mongoose"));

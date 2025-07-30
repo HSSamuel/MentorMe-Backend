@@ -1,9 +1,4 @@
-// --- FIX: "dotenv/config" must be the very first import to load environment variables ---
 import "dotenv/config";
-
-console.log(
-  `[SERVER] Attempting to connect to DB at: ${process.env.MONGODB_URI}`
-);
 import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
@@ -30,7 +25,7 @@ import aiRoutes from "./routes/ai.routes";
 import streamRoutes from "./routes/stream.routes";
 import communityRoutes from "./routes/community.routes";
 import resourceRoutes from "./routes/resource.routes";
-import discoverRoutes from "./routes/discover.routes"; // --- 1. IMPORT NEW DISCOVER ROUTES ---
+import discoverRoutes from "./routes/discover.routes";
 import { seedLevels } from "./services/gamification.service";
 
 // Configurations and Services
@@ -126,7 +121,7 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/community", communityRoutes);
 app.use("/api/stream", streamRoutes);
 app.use("/api/resources", resourceRoutes);
-app.use("/api/discover", discoverRoutes); // --- 2. USE NEW DISCOVER ROUTES ---
+app.use("/api/discover", discoverRoutes);
 
 app.get("/", (req, res) => {
   res.send("Mentor Backend API is running!");
