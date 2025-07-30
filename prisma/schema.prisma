@@ -71,7 +71,7 @@ model User {
   createdAt            DateTime              @default(now())
   posts                ForumPost[]
   comments             ForumComment[]
-  sessionParticipations SessionParticipant[] // Relation to group sessions a user has joined
+  sessionParticipations SessionParticipant[]
 }
 
 model Profile {
@@ -95,13 +95,11 @@ model MentorshipRequest {
   createdAt DateTime  @default(now())
   updatedAt DateTime? @updatedAt
 
-  // Relationships
   mentor  User     @relation("MentorRequests", fields: [mentorId], references: [id])
   mentee  User     @relation("MenteeRequests", fields: [menteeId], references: [id])
   reviews Review[]
   goals   Goal[]
 
-  // Indexes
   @@index([mentorId, status])
   @@index([menteeId, status])
 }
@@ -120,24 +118,23 @@ model SessionInsight {
 model Session {
   id              String               @id @default(auto()) @map("_id") @db.ObjectId
   mentorId        String               @db.ObjectId
-  menteeId        String?              @db.ObjectId // Optional for group sessions
+  menteeId        String?              @db.ObjectId
   date            DateTime
   rating          Int?
   feedback        String?
   mentor          User                 @relation("MentorSessions", fields: [mentorId], references: [id])
-  mentee          User?                @relation("MenteeSessions", fields: [menteeId], references: [id]) // Optional for group sessions
+  mentee          User?                @relation("MenteeSessions", fields: [menteeId], references: [id])
   createdAt       DateTime             @default(now())
   insights        SessionInsight?
-  isGroupSession  Boolean              @default(false) // New field for group sessions
-  topic           String?              // New field for group session topic
-  maxParticipants Int?                 // New field for max number of mentees
-  participants    SessionParticipant[] // New relation for group session participants
+  isGroupSession  Boolean              @default(false)
+  topic           String?
+  maxParticipants Int?
+  participants    SessionParticipant[]
 
   @@index([mentorId, date])
   @@index([menteeId, date])
 }
 
-// New model to handle many-to-many relationship for group sessions
 model SessionParticipant {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   sessionId String   @db.ObjectId
@@ -195,9 +192,9 @@ model Availability {
   id        String @id @default(auto()) @map("_id") @db.ObjectId
   mentorId  String @db.ObjectId
   mentor    User   @relation(fields: [mentorId], references: [id])
-  day       String // e.g., "Monday", "Tuesday"
-  startTime String // e.g., "09:00"
-  endTime   String // e.g., "17:00"
+  day       String
+  startTime String
+  endTime   String
 }
 
 model Conversation {
@@ -236,9 +233,23 @@ model AIMessage {
   id             String         @id @default(auto()) @map("_id") @db.ObjectId
   conversationId String         @db.ObjectId
   conversation   AIConversation @relation(fields: [conversationId], references: [id])
-  sender         String // "USER" or "AI"
+  sender         String
   content        String
   createdAt      DateTime       @default(now())
+}
+
+// --- NEW MODEL FOR RESOURCE LIBRARY ---
+model Resource {
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String
+  link        String       @unique
+  type        ResourceType // ARTICLE, VIDEO, COURSE, etc.
+  tags        String[]
+  imageUrl    String?
+  embedding   Float[]      // For AI-powered recommendations
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 }
 
 enum Role {
@@ -263,4 +274,14 @@ enum NotificationType {
   GOAL_COMPLETED
   AVAILABILITY_UPDATED
   VIDEO_CALL_INITIATED
+}
+
+// --- NEW ENUM FOR RESOURCE TYPE ---
+enum ResourceType {
+  ARTICLE
+  VIDEO
+  COURSE
+  BOOK
+  PODCAST
+  OTHER
 }

@@ -34,6 +34,51 @@ if (process.env.COHERE_API_KEY) {
 }
 // --- End of AI Initialization ---
 
+// --- NEW: Helper function for group session calendar events ---
+const handleGroupCalendarEvent = async (sessionId: string) => {
+  try {
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        mentor: true,
+        participants: {
+          include: {
+            mentee: true,
+          },
+        },
+      },
+    });
+
+    if (!session || !session.isGroupSession) return;
+
+    const mentor = session.mentor;
+    const mentees = session.participants.map((p) => p.mentee);
+    const allUsers = [mentor, ...mentees];
+    const attendeeEmails = allUsers.map((u) => u.email);
+
+    const eventDetails = {
+      summary: `Mentoring Circle: ${session.topic}`,
+      description:
+        "Your group mentorship session booked via the MentorMe Platform.",
+      start: new Date(session.date),
+      end: new Date(new Date(session.date).getTime() + 60 * 60 * 1000), // 1 hour duration
+      attendees: attendeeEmails,
+    };
+
+    // Send/update the event for every participant who has linked their Google account
+    for (const user of allUsers) {
+      if (user.googleRefreshToken) {
+        await createCalendarEvent(user.id, eventDetails);
+      }
+    }
+  } catch (calendarError) {
+    console.error(
+      `Could not create/update calendar event for group session ${sessionId}:`,
+      calendarError
+    );
+  }
+};
+
 const getUserRole = (req: Request): string | null => {
   if (!req.user) return null;
   return (req.user as any).role as string;
@@ -204,6 +249,8 @@ export const createSession = async (
           maxParticipants: parseInt(maxParticipants, 10),
         },
       });
+      // --- UPDATE: Handle calendar event for new group session ---
+      await handleGroupCalendarEvent(newSession.id);
       res.status(201).json(newSession);
       return;
     }
@@ -336,6 +383,9 @@ export const joinGroupSession = async (
         menteeId,
       },
     });
+
+    // --- UPDATE: Handle calendar event when a new mentee joins ---
+    await handleGroupCalendarEvent(sessionId);
 
     res.status(200).json({ message: "Successfully joined the session." });
   } catch (error) {
@@ -559,7 +609,6 @@ export const generateVideoCallToken = async (
   }
 };
 
-// --- FIX: Renamed and updated logic to handle all participants ---
 export const notifyParticipantsOfCall = async (
   req: Request,
   res: Response
@@ -578,7 +627,7 @@ export const notifyParticipantsOfCall = async (
       include: {
         participants: { include: { mentee: { include: { profile: true } } } },
         mentor: { include: { profile: true } },
-        mentee: { include: { profile: true } }, // For 1-on-1
+        mentee: { include: { profile: true } },
       },
     });
 

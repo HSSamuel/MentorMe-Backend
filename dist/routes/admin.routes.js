@@ -4,8 +4,9 @@ const express_1 = require("express");
 const admin_controller_1 = require("../controllers/admin.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const router = (0, express_1.Router)();
-// This line applies the authentication and admin checks to ALL routes in this file.
+// This middleware ensures all routes in this file are protected and only accessible by admins.
 router.use(auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware);
+// --- 2. ADD THE MISSING DASHBOARD ROUTE ---
 router.get("/dashboard", admin_controller_1.getDashboardData);
 // Define the existing routes
 router.get("/users", admin_controller_1.getAllUsers);

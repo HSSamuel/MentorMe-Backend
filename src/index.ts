@@ -29,6 +29,8 @@ import calendarRoutes from "./routes/calendar.routes";
 import aiRoutes from "./routes/ai.routes";
 import streamRoutes from "./routes/stream.routes";
 import communityRoutes from "./routes/community.routes";
+import resourceRoutes from "./routes/resource.routes";
+import discoverRoutes from "./routes/discover.routes"; // --- 1. IMPORT NEW DISCOVER ROUTES ---
 import { seedLevels } from "./services/gamification.service";
 
 // Configurations and Services
@@ -123,6 +125,8 @@ app.use("/api/calendar", calendarRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/community", communityRoutes);
 app.use("/api/stream", streamRoutes);
+app.use("/api/resources", resourceRoutes);
+app.use("/api/discover", discoverRoutes); // --- 2. USE NEW DISCOVER ROUTES ---
 
 app.get("/", (req, res) => {
   res.send("Mentor Backend API is running!");

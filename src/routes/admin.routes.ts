@@ -8,14 +8,16 @@ import {
   getStats,
   deleteRequest,
   updateRequestStatus,
-  getDashboardData,
+  getDashboardData, // --- 1. IMPORT THE DASHBOARD FUNCTION ---
 } from "../controllers/admin.controller";
 import { authMiddleware, adminMiddleware } from "../middleware/auth.middleware";
 
 const router = Router();
 
-// This line applies the authentication and admin checks to ALL routes in this file.
+// This middleware ensures all routes in this file are protected and only accessible by admins.
 router.use(authMiddleware, adminMiddleware);
+
+// --- 2. ADD THE MISSING DASHBOARD ROUTE ---
 router.get("/dashboard", getDashboardData);
 
 // Define the existing routes
