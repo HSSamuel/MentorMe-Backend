@@ -29,7 +29,7 @@ const ai_routes_1 = __importDefault(require("./routes/ai.routes"));
 const stream_routes_1 = __importDefault(require("./routes/stream.routes"));
 const community_routes_1 = __importDefault(require("./routes/community.routes"));
 const resource_routes_1 = __importDefault(require("./routes/resource.routes"));
-const discover_routes_1 = __importDefault(require("./routes/discover.routes")); // --- 1. IMPORT NEW DISCOVER ROUTES ---
+const discover_routes_1 = __importDefault(require("./routes/discover.routes"));
 const gamification_service_1 = require("./services/gamification.service");
 // Configurations and Services
 require("./config/passport");
@@ -106,7 +106,7 @@ app.use("/api/ai", ai_routes_1.default);
 app.use("/api/community", community_routes_1.default);
 app.use("/api/stream", stream_routes_1.default);
 app.use("/api/resources", resource_routes_1.default);
-app.use("/api/discover", discover_routes_1.default); // --- 2. USE NEW DISCOVER ROUTES ---
+app.use("/api/discover", discover_routes_1.default);
 app.get("/", (req, res) => {
     res.send("Mentor Backend API is running!");
 });

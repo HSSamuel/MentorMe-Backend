@@ -8,6 +8,8 @@ const gamification_service_1 = require("../services/gamification.service");
 const client_1 = __importDefault(require("../client"));
 const stream_chat_1 = require("stream-chat");
 const getUserId_1 = require("../utils/getUserId");
+// --- ADDED: Import the new email function ---
+const email_service_1 = require("../services/email.service");
 const streamClient = stream_chat_1.StreamChat.getInstance(process.env.STREAM_API_KEY, process.env.STREAM_API_SECRET);
 const getUserIdForRequest = (req) => {
     if (!req.user)
@@ -77,10 +79,14 @@ const createRequest = async (req, res) => {
                 menteeId,
                 mentorId,
                 status: "PENDING",
-                message: "Request to connect",
+                message: "Request to connect", // This seems to be a default message
             },
             include: {
                 mentee: {
+                    include: { profile: true },
+                },
+                // --- ADDED: Include mentor details to get their email and name ---
+                mentor: {
                     include: { profile: true },
                 },
             },
@@ -93,9 +99,14 @@ const createRequest = async (req, res) => {
                 link: `/requests`,
             },
         });
+        // --- ADDED: Send the email notification to the mentor ---
+        if (newRequest.mentor && newRequest.mentee) {
+            await (0, email_service_1.sendNewRequestEmail)(newRequest.mentor.email, newRequest.mentee.profile?.name || "A mentee", newRequest.mentor.profile?.name || "Mentor");
+        }
         res.status(201).json(newRequest);
     }
     catch (error) {
+        console.error("Error creating mentorship request:", error); // Added more specific log
         res.status(500).json({ message: "Server error while creating request" });
     }
 };
@@ -183,7 +194,6 @@ const updateRequestStatus = async (req, res) => {
         if (status === "ACCEPTED") {
             try {
                 const channelId = `mentorship-${request.mentorId}-${request.menteeId}`;
-                // --- [FIX] Create the data object first to bypass TypeScript's strict literal check ---
                 const channelData = {
                     name: `Mentorship: ${request.mentor.profile?.name} & ${request.mentee.profile?.name}`,
                     created_by_id: mentorId,
@@ -235,18 +245,16 @@ exports.updateRequestStatus = updateRequestStatus;
 const sendRequest = async (req, res) => {
     const menteeId = (0, getUserId_1.getUserId)(req);
     const mentorId = req.params.mentorId;
-    const { message } = req.body; // Get the message from the request body
+    const { message } = req.body;
     if (!menteeId) {
         return res.status(401).json({ message: "Authentication required" });
     }
-    // Add a check for the message
     if (!message) {
         return res
             .status(400)
             .json({ message: "A message is required to send a request." });
     }
     try {
-        // Check if a request already exists
         const existingRequest = await client_1.default.mentorshipRequest.findFirst({
             where: { menteeId, mentorId, status: "PENDING" },
         });
@@ -255,21 +263,18 @@ const sendRequest = async (req, res) => {
                 message: "You already have a pending request with this mentor.",
             });
         }
-        // The 'message' field from the request body is now correctly included.
         const newRequest = await client_1.default.mentorshipRequest.create({
             data: {
                 menteeId,
                 mentorId,
                 status: "PENDING",
-                message: message, // Included the message here
+                message: message,
             },
         });
-        // Fetch the mentee's profile separately to use in the notification.
         const mentee = await client_1.default.user.findUnique({
             where: { id: menteeId },
             include: { profile: true },
         });
-        // Create a notification for the mentor
         await client_1.default.notification.create({
             data: {
                 userId: mentorId,
@@ -278,6 +283,16 @@ const sendRequest = async (req, res) => {
                 link: "/requests",
             },
         });
+        // --- ADDED: Send the email notification to the mentor ---
+        if (mentee) {
+            const mentor = await client_1.default.user.findUnique({
+                where: { id: mentorId },
+                include: { profile: true },
+            });
+            if (mentor) {
+                await (0, email_service_1.sendNewRequestEmail)(mentor.email, mentee.profile?.name || "A mentee", mentor.profile?.name || "Mentor");
+            }
+        }
         res.status(201).json(newRequest);
     }
     catch (error) {

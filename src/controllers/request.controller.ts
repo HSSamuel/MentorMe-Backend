@@ -4,6 +4,8 @@ import { awardPoints } from "../services/gamification.service";
 import prisma from "../client";
 import { StreamChat } from "stream-chat";
 import { getUserId } from "../utils/getUserId";
+// --- ADDED: Import the new email function ---
+import { sendNewRequestEmail } from "../services/email.service";
 
 const streamClient = StreamChat.getInstance(
   process.env.STREAM_API_KEY!,
@@ -85,10 +87,14 @@ export const createRequest = async (
         menteeId,
         mentorId,
         status: "PENDING",
-        message: "Request to connect",
+        message: "Request to connect", // This seems to be a default message
       },
       include: {
         mentee: {
+          include: { profile: true },
+        },
+        // --- ADDED: Include mentor details to get their email and name ---
+        mentor: {
           include: { profile: true },
         },
       },
@@ -105,8 +111,18 @@ export const createRequest = async (
       },
     });
 
+    // --- ADDED: Send the email notification to the mentor ---
+    if (newRequest.mentor && newRequest.mentee) {
+      await sendNewRequestEmail(
+        newRequest.mentor.email,
+        newRequest.mentee.profile?.name || "A mentee",
+        newRequest.mentor.profile?.name || "Mentor"
+      );
+    }
+
     res.status(201).json(newRequest);
   } catch (error) {
+    console.error("Error creating mentorship request:", error); // Added more specific log
     res.status(500).json({ message: "Server error while creating request" });
   }
 };
@@ -203,7 +219,6 @@ export const updateRequestStatus = async (
       try {
         const channelId = `mentorship-${request.mentorId}-${request.menteeId}`;
 
-        // --- [FIX] Create the data object first to bypass TypeScript's strict literal check ---
         const channelData = {
           name: `Mentorship: ${request.mentor.profile?.name} & ${request.mentee.profile?.name}`,
           created_by_id: mentorId,
@@ -266,13 +281,12 @@ export const updateRequestStatus = async (
 export const sendRequest = async (req: Request, res: Response) => {
   const menteeId = getUserId(req);
   const mentorId = req.params.mentorId;
-  const { message } = req.body; // Get the message from the request body
+  const { message } = req.body;
 
   if (!menteeId) {
     return res.status(401).json({ message: "Authentication required" });
   }
 
-  // Add a check for the message
   if (!message) {
     return res
       .status(400)
@@ -280,7 +294,6 @@ export const sendRequest = async (req: Request, res: Response) => {
   }
 
   try {
-    // Check if a request already exists
     const existingRequest = await prisma.mentorshipRequest.findFirst({
       where: { menteeId, mentorId, status: "PENDING" },
     });
@@ -291,23 +304,20 @@ export const sendRequest = async (req: Request, res: Response) => {
       });
     }
 
-    // The 'message' field from the request body is now correctly included.
     const newRequest = await prisma.mentorshipRequest.create({
       data: {
         menteeId,
         mentorId,
         status: "PENDING",
-        message: message, // Included the message here
+        message: message,
       },
     });
 
-    // Fetch the mentee's profile separately to use in the notification.
     const mentee = await prisma.user.findUnique({
       where: { id: menteeId },
       include: { profile: true },
     });
 
-    // Create a notification for the mentor
     await prisma.notification.create({
       data: {
         userId: mentorId,
@@ -316,6 +326,21 @@ export const sendRequest = async (req: Request, res: Response) => {
         link: "/requests",
       },
     });
+
+    // --- ADDED: Send the email notification to the mentor ---
+    if (mentee) {
+      const mentor = await prisma.user.findUnique({
+        where: { id: mentorId },
+        include: { profile: true },
+      });
+      if (mentor) {
+        await sendNewRequestEmail(
+          mentor.email,
+          mentee.profile?.name || "A mentee",
+          mentor.profile?.name || "Mentor"
+        );
+      }
+    }
 
     res.status(201).json(newRequest);
   } catch (error) {

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendPasswordResetEmail = exports.sendReminderEmail = void 0;
+exports.sendNewRequestEmail = exports.sendPasswordResetEmail = exports.sendReminderEmail = void 0;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const config_1 = __importDefault(require("../config")); // Import our new config loader
 const transporter = nodemailer_1.default.createTransport({
@@ -38,3 +38,19 @@ const sendPasswordResetEmail = async (to, resetURL) => {
     });
 };
 exports.sendPasswordResetEmail = sendPasswordResetEmail;
+// --- ADDED: New function to notify mentor of a new request ---
+const sendNewRequestEmail = async (mentorEmail, menteeName, mentorName) => {
+    const loginUrl = `${config_1.default.get("FRONTEND_URL")}/login`; // Assumes you have a FRONTEND_URL in your config
+    const mailOptions = {
+        from: `"MentorMe" <${config_1.default.get("EMAIL")}>`,
+        to: mentorEmail,
+        subject: "You Have a New Mentorship Request!",
+        html: `<p>Hi ${mentorName},</p>
+           <p>You have a new mentorship request from <b>${menteeName}</b> on the MentorMe platform.</p>
+           <p>Please log in to your account to review the request and respond.</p>
+           <p><a href="${loginUrl}" style="padding: 10px 15px; background-color: #4f46e5; color: white; text-decoration: none; border-radius: 5px;">View Request Now</a></p>
+           <p>Thank you for being a mentor!</p>`,
+    };
+    await transporter.sendMail(mailOptions);
+};
+exports.sendNewRequestEmail = sendNewRequestEmail;
