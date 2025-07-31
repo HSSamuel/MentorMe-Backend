@@ -67,6 +67,7 @@ const getAllSessions = async (req, res) => {
             include: {
                 mentor: { select: { profile: true } },
                 mentee: { select: { profile: true } },
+                participants: { include: { mentee: { include: { profile: true } } } },
             },
             orderBy: { date: "desc" },
         });
@@ -99,8 +100,6 @@ const assignMentor = async (req, res) => {
                 menteeId,
                 mentorId,
                 status: "ACCEPTED",
-                // --- [THE FIX] ---
-                // Added the required 'message' field with a default value for admin actions.
                 message: "This mentorship was manually created by an administrator.",
             },
         });
@@ -145,6 +144,10 @@ const updateUserRole = async (req, res) => {
         const updatedUser = await client_1.default.user.update({
             where: { id },
             data: { role: role },
+            // --- FIX: Include the user's profile in the response ---
+            include: {
+                profile: true,
+            },
         });
         const { password, ...userWithoutPassword } = updatedUser;
         res.status(200).json(userWithoutPassword);
@@ -202,7 +205,7 @@ const updateRequestStatus = async (req, res) => {
     }
 };
 exports.updateRequestStatus = updateRequestStatus;
-// --- [NEW] Helper function to process data for charts ---
+// --- Helper function to process data for charts ---
 const processDataForChart = (data, dateField) => {
     const monthlyCounts = Array(12).fill(0);
     const monthLabels = [];
@@ -221,13 +224,12 @@ const processDataForChart = (data, dateField) => {
     });
     return { labels: monthLabels, data: monthlyCounts };
 };
-// --- [NEW] Function to get all data for the admin dashboard ---
+// --- Function to get all data for the admin dashboard ---
 const getDashboardData = async (req, res) => {
     try {
         const twelveMonthsAgo = new Date();
         twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
         const [statsData, usersForChart, sessionsForChart, recentUsers, recentMatches,] = await Promise.all([
-            // Re-use the stat logic directly
             (async () => {
                 const totalUsers = await client_1.default.user.count();
                 const totalMentors = await client_1.default.user.count({

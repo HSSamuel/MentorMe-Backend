@@ -75,6 +75,7 @@ export const getAllSessions = async (
       include: {
         mentor: { select: { profile: true } },
         mentee: { select: { profile: true } },
+        participants: { include: { mentee: { include: { profile: true } } } },
       },
       orderBy: { date: "desc" },
     });
@@ -113,8 +114,6 @@ export const assignMentor = async (
         menteeId,
         mentorId,
         status: "ACCEPTED",
-        // --- [THE FIX] ---
-        // Added the required 'message' field with a default value for admin actions.
         message: "This mentorship was manually created by an administrator.",
       },
     });
@@ -162,6 +161,10 @@ export const updateUserRole = async (
     const updatedUser = await prisma.user.update({
       where: { id },
       data: { role: role as Role },
+      // --- FIX: Include the user's profile in the response ---
+      include: {
+        profile: true,
+      },
     });
     const { password, ...userWithoutPassword } = updatedUser;
     res.status(200).json(userWithoutPassword);
@@ -229,7 +232,7 @@ export const updateRequestStatus = async (
   }
 };
 
-// --- [NEW] Helper function to process data for charts ---
+// --- Helper function to process data for charts ---
 const processDataForChart = (
   data: { createdAt?: Date; date?: Date }[],
   dateField: "createdAt" | "date"
@@ -256,7 +259,7 @@ const processDataForChart = (
   return { labels: monthLabels, data: monthlyCounts };
 };
 
-// --- [NEW] Function to get all data for the admin dashboard ---
+// --- Function to get all data for the admin dashboard ---
 export const getDashboardData = async (
   req: Request,
   res: Response
@@ -272,7 +275,6 @@ export const getDashboardData = async (
       recentUsers,
       recentMatches,
     ] = await Promise.all([
-      // Re-use the stat logic directly
       (async () => {
         const totalUsers = await prisma.user.count();
         const totalMentors = await prisma.user.count({

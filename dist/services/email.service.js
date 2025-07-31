@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendNewRequestEmail = exports.sendPasswordResetEmail = exports.sendReminderEmail = void 0;
 const nodemailer_1 = __importDefault(require("nodemailer"));
-const config_1 = __importDefault(require("../config")); // Import our new config loader
+const config_1 = __importDefault(require("../config"));
 const transporter = nodemailer_1.default.createTransport({
     service: "Gmail",
     auth: {
@@ -38,9 +38,9 @@ const sendPasswordResetEmail = async (to, resetURL) => {
     });
 };
 exports.sendPasswordResetEmail = sendPasswordResetEmail;
-// --- ADDED: New function to notify mentor of a new request ---
+// --- Function to notify mentor of a new request ---
 const sendNewRequestEmail = async (mentorEmail, menteeName, mentorName) => {
-    const loginUrl = `${config_1.default.get("FRONTEND_URL")}/login`; // Assumes you have a FRONTEND_URL in your config
+    const loginUrl = `${config_1.default.get("FRONTEND_URL")}/login`;
     const mailOptions = {
         from: `"MentorMe" <${config_1.default.get("EMAIL")}>`,
         to: mentorEmail,
