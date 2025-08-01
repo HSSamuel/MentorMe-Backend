@@ -8,7 +8,8 @@ import {
   getStats,
   deleteRequest,
   updateRequestStatus,
-  getDashboardData, // --- 1. IMPORT THE DASHBOARD FUNCTION ---
+  getDashboardData,
+  deleteSession,
 } from "../controllers/admin.controller";
 import { authMiddleware, adminMiddleware } from "../middleware/auth.middleware";
 
@@ -26,6 +27,8 @@ router.put("/users/:id/role", updateUserRole);
 router.get("/matches", getAllMatches);
 router.post("/matches", assignMentor);
 router.get("/sessions", getAllSessions);
+// --- [NEW] Add the new DELETE route for sessions ---
+router.delete("/sessions/:sessionId", deleteSession);
 router.get("/stats", getStats);
 router.delete("/requests/:id", deleteRequest);
 router.put("/requests/:id/status", updateRequestStatus);

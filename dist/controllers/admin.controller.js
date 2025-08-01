@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDashboardData = exports.updateRequestStatus = exports.deleteRequest = exports.updateUserRole = exports.getStats = exports.assignMentor = exports.getAllSessions = exports.getAllUsers = exports.getAllMatches = void 0;
+exports.getDashboardData = exports.updateRequestStatus = exports.deleteRequest = exports.updateUserRole = exports.getStats = exports.assignMentor = exports.deleteSession = exports.getAllSessions = exports.getAllUsers = exports.getAllMatches = void 0;
 const client_1 = __importDefault(require("../client"));
 // Ensure this function is exported
 const getAllMatches = async (req, res) => {
@@ -65,8 +65,8 @@ const getAllSessions = async (req, res) => {
     try {
         const sessions = await client_1.default.session.findMany({
             include: {
-                mentor: { select: { profile: true } },
-                mentee: { select: { profile: true } },
+                mentor: { select: { id: true, profile: true } },
+                mentee: { select: { id: true, profile: true } },
                 participants: { include: { mentee: { include: { profile: true } } } },
             },
             orderBy: { date: "desc" },
@@ -79,6 +79,31 @@ const getAllSessions = async (req, res) => {
     }
 };
 exports.getAllSessions = getAllSessions;
+// --- [FIXED] Function to delete a session based on the correct schema ---
+const deleteSession = async (req, res) => {
+    const { sessionId } = req.params;
+    try {
+        // According to schema.prisma, we must delete related SessionInsight and SessionParticipant records first.
+        // 1. Delete associated SessionInsights
+        await client_1.default.sessionInsight.deleteMany({
+            where: { sessionId: sessionId },
+        });
+        // 2. Delete associated SessionParticipants
+        await client_1.default.sessionParticipant.deleteMany({
+            where: { sessionId: sessionId },
+        });
+        // 3. Now it's safe to delete the session itself
+        await client_1.default.session.delete({
+            where: { id: sessionId },
+        });
+        res.status(204).send(); // Success, no content to return.
+    }
+    catch (error) {
+        console.error(`Error deleting session ${sessionId}:`, error);
+        res.status(500).json({ message: "Failed to delete session." });
+    }
+};
+exports.deleteSession = deleteSession;
 const assignMentor = async (req, res) => {
     const { menteeId, mentorId } = req.body;
     if (!menteeId || !mentorId) {
@@ -144,7 +169,6 @@ const updateUserRole = async (req, res) => {
         const updatedUser = await client_1.default.user.update({
             where: { id },
             data: { role: role },
-            // --- FIX: Include the user's profile in the response ---
             include: {
                 profile: true,
             },

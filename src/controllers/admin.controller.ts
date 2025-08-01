@@ -73,8 +73,8 @@ export const getAllSessions = async (
   try {
     const sessions = await prisma.session.findMany({
       include: {
-        mentor: { select: { profile: true } },
-        mentee: { select: { profile: true } },
+        mentor: { select: { id: true, profile: true } },
+        mentee: { select: { id: true, profile: true } },
         participants: { include: { mentee: { include: { profile: true } } } },
       },
       orderBy: { date: "desc" },
@@ -83,6 +83,35 @@ export const getAllSessions = async (
     res.status(200).json({ totalCount, sessions });
   } catch (error) {
     res.status(500).json({ message: "Error fetching sessions." });
+  }
+};
+
+// --- [FIXED] Function to delete a session based on the correct schema ---
+export const deleteSession = async (req: Request, res: Response) => {
+  const { sessionId } = req.params;
+
+  try {
+    // According to schema.prisma, we must delete related SessionInsight and SessionParticipant records first.
+
+    // 1. Delete associated SessionInsights
+    await prisma.sessionInsight.deleteMany({
+      where: { sessionId: sessionId },
+    });
+
+    // 2. Delete associated SessionParticipants
+    await prisma.sessionParticipant.deleteMany({
+      where: { sessionId: sessionId },
+    });
+
+    // 3. Now it's safe to delete the session itself
+    await prisma.session.delete({
+      where: { id: sessionId },
+    });
+
+    res.status(204).send(); // Success, no content to return.
+  } catch (error) {
+    console.error(`Error deleting session ${sessionId}:`, error);
+    res.status(500).json({ message: "Failed to delete session." });
   }
 };
 
@@ -161,7 +190,6 @@ export const updateUserRole = async (
     const updatedUser = await prisma.user.update({
       where: { id },
       data: { role: role as Role },
-      // --- FIX: Include the user's profile in the response ---
       include: {
         profile: true,
       },

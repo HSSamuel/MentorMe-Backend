@@ -14,6 +14,8 @@ router.put("/users/:id/role", admin_controller_1.updateUserRole);
 router.get("/matches", admin_controller_1.getAllMatches);
 router.post("/matches", admin_controller_1.assignMentor);
 router.get("/sessions", admin_controller_1.getAllSessions);
+// --- [NEW] Add the new DELETE route for sessions ---
+router.delete("/sessions/:sessionId", admin_controller_1.deleteSession);
 router.get("/stats", admin_controller_1.getStats);
 router.delete("/requests/:id", admin_controller_1.deleteRequest);
 router.put("/requests/:id/status", admin_controller_1.updateRequestStatus);
