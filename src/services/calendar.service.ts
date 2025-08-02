@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import prisma from "../client";
+import { User } from "@prisma/client";
 
 // Initialize the Google OAuth2 client
 const oauth2Client = new google.auth.OAuth2(
@@ -34,13 +35,13 @@ export const getTokensFromCode = async (code: string) => {
  * Creates a new event in the user's Google Calendar.
  */
 export const createCalendarEvent = async (
-  userId: string,
+  userId: string, // This is the mentor's ID, who is creating the event
   eventDetails: {
-    summary: string;
+    summary: string; // This will be replaced by our new summary
     description: string;
     start: Date;
     end: Date;
-    attendees: string[];
+    attendees: string[]; // Expecting an array of mentee and mentor emails
   }
 ) => {
   const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -56,20 +57,72 @@ export const createCalendarEvent = async (
 
   const calendar = google.calendar({ version: "v3", auth: oauth2Client });
 
+  // --- START OF IMPROVEMENTS ---
+
+  // 1. Fetch attendee profiles to get their names
+  const attendeesWithProfiles = await prisma.user.findMany({
+    where: {
+      email: { in: eventDetails.attendees },
+    },
+    include: {
+      profile: true,
+    },
+  });
+
+  // 2. Create a clean list of names, falling back to email if a name isn't set
+  const attendeeNames = attendeesWithProfiles
+    .map((u) => u.profile?.name || u.email)
+    .join(" & ");
+
+  // 3. Format the date for the subject line
+  const eventDate = eventDetails.start.toLocaleDateString("en-US", {
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
+  // 4. Construct the new, professional summary (email subject)
+  const newSummary = `MentorMe Session: ${attendeeNames} on ${eventDate}`;
+
+  // 5. Create an improved description for the event body
+  const newDescription = `
+    You have a new mentorship session scheduled via MentorMe.
+    
+    ${eventDetails.description}
+    
+    Please be on time and prepared for your session.
+    
+    - The MentorMe Team
+  `;
+
+  // --- END OF IMPROVEMENTS ---
+
   await calendar.events.insert({
     calendarId: "primary",
+    // --- UPDATE: Add conferenceData for Google Meet link ---
+    conferenceDataVersion: 1,
     requestBody: {
-      summary: eventDetails.summary,
-      description: eventDetails.description,
+      summary: newSummary, // Use the new, improved summary
+      description: newDescription, // Use the new, improved description
       start: {
         dateTime: eventDetails.start.toISOString(),
-        timeZone: "UTC", // Or dynamically set the user's timezone
+        timeZone: "UTC",
       },
       end: {
         dateTime: eventDetails.end.toISOString(),
         timeZone: "UTC",
       },
       attendees: eventDetails.attendees.map((email) => ({ email })),
+      // --- UPDATE: Automatically create a Google Meet link for the event ---
+      conferenceData: {
+        createRequest: {
+          requestId: `mentor-me-session-${Date.now()}`,
+          conferenceSolutionKey: {
+            type: "hangoutsMeet",
+          },
+        },
+      },
     },
   });
 };

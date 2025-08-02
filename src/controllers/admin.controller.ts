@@ -382,3 +382,103 @@ export const getDashboardData = async (
     res.status(500).json({ message: "Error fetching admin dashboard data." });
   }
 };
+
+export const deleteUser = async (req: Request, res: Response) => {
+  const { userId } = req.params;
+
+  try {
+    // Use a transaction to ensure all or no operations are completed
+    await prisma.$transaction(async (tx) => {
+      // 1. Find all mentorship requests involving the user to get their IDs
+      const requests = await tx.mentorshipRequest.findMany({
+        where: { OR: [{ menteeId: userId }, { mentorId: userId }] },
+        select: { id: true },
+      });
+      const requestIds = requests.map((r) => r.id);
+
+      // 2. Delete nested relations of MentorshipRequest (Reviews and Goals)
+      if (requestIds.length > 0) {
+        await tx.review.deleteMany({
+          where: { mentorshipRequestId: { in: requestIds } },
+        });
+        await tx.goal.deleteMany({
+          where: { mentorshipRequestId: { in: requestIds } },
+        });
+      }
+
+      // 3. Now delete the MentorshipRequests themselves
+      await tx.mentorshipRequest.deleteMany({
+        where: { id: { in: requestIds } },
+      });
+
+      // 4. Delete direct one-to-many relations
+      await tx.notification.deleteMany({ where: { userId } });
+      await tx.availability.deleteMany({ where: { mentorId: userId } });
+      await tx.aIConversation.deleteMany({ where: { userId } });
+      await tx.forumPost.deleteMany({ where: { authorId: userId } });
+      await tx.forumComment.deleteMany({ where: { authorId: userId } });
+
+      // 5. Handle Sessions and their children (Insights, Participants)
+      const sessions = await tx.session.findMany({
+        where: { OR: [{ menteeId: userId }, { mentorId: userId }] },
+        select: { id: true },
+      });
+      const sessionIds = sessions.map((s) => s.id);
+
+      if (sessionIds.length > 0) {
+        await tx.sessionInsight.deleteMany({
+          where: { sessionId: { in: sessionIds } },
+        });
+        await tx.sessionParticipant.deleteMany({
+          where: { sessionId: { in: sessionIds } },
+        });
+        await tx.session.deleteMany({ where: { id: { in: sessionIds } } });
+      }
+
+      // 6. Handle many-to-many relations by fetching, filtering, and updating
+      // For Conversations
+      const conversationsToUpdate = await tx.conversation.findMany({
+        where: { participantIDs: { has: userId } },
+      });
+      for (const conv of conversationsToUpdate) {
+        await tx.conversation.update({
+          where: { id: conv.id },
+          data: {
+            participantIDs: {
+              set: conv.participantIDs.filter((id) => id !== userId),
+            },
+          },
+        });
+      }
+
+      // For Messages (readBy)
+      const messagesToUpdate = await tx.message.findMany({
+        where: { readByIds: { has: userId } },
+      });
+      for (const msg of messagesToUpdate) {
+        await tx.message.update({
+          where: { id: msg.id },
+          data: {
+            readByIds: {
+              set: msg.readByIds.filter((id) => id !== userId),
+            },
+          },
+        });
+      }
+
+      // 7. Delete messages sent by the user
+      await tx.message.deleteMany({ where: { senderId: userId } });
+
+      // 8. Delete the user's profile (onDelete: Cascade in schema will handle this, but explicit deletion is safer)
+      await tx.profile.deleteMany({ where: { userId } });
+
+      // 9. Finally, delete the user
+      await tx.user.delete({ where: { id: userId } });
+    });
+
+    res.status(200).json({ message: "User deleted successfully." });
+  } catch (error) {
+    console.error(`Error deleting user ${userId}:`, error);
+    res.status(500).json({ message: "Failed to delete user." });
+  }
+};
