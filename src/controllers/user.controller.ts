@@ -400,7 +400,6 @@ export const getRecommendedMentors = async (
   }
 };
 
-// --- [NEW] FUNCTION TO GET USER CONNECTIONS ---
 export const getUserConnections = async (
   req: Request,
   res: Response,
@@ -433,18 +432,17 @@ export const getUserConnections = async (
     });
 
     const connections = mentorships.map((ship) => {
-      // If the current user is the mentor, the connection is the mentee, and vice versa.
       const otherUser = ship.mentorId === userId ? ship.mentee : ship.mentor;
       return {
+        mentorshipRequestId: ship.id,
         id: otherUser.id,
         email: otherUser.email,
         role: otherUser.role,
-        name: otherUser.profile?.name || "User", // Provide a fallback name
-        avatarUrl: otherUser.profile?.avatarUrl, // Match the schema field
+        name: otherUser.profile?.name || "User",
+        avatarUrl: otherUser.profile?.avatarUrl,
       };
     });
 
-    // Ensure connections are unique by user ID
     const uniqueConnections = Array.from(
       new Map(connections.map((item) => [item.id, item])).values()
     );
@@ -452,6 +450,6 @@ export const getUserConnections = async (
     res.status(200).json(uniqueConnections);
   } catch (error) {
     console.error("Error fetching user connections:", error);
-    next(error); // Pass error to the global error handler
+    next(error);
   }
 };
