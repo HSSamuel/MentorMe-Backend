@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getIcebreakers = exports.summarizeTranscript = exports.getAiMentorMatches = exports.deleteAIConversation = exports.handleFileAnalysis = exports.handleCohereChat = exports.handleAIChat = exports.getAIMessages = exports.getAIConversations = void 0;
+exports.getIcebreakers = exports.summarizeTranscript = exports.getAiMentorMatches = exports.deleteAIConversation = exports.handleFileAnalysis = exports.handleCohereChat = exports.handleAIChat = exports.getAIMessages = exports.getAIConversations = exports.refineGoalWithAI = void 0;
 const generative_ai_1 = require("@google/generative-ai");
 const client_1 = __importDefault(require("../client"));
 const cohere_ai_1 = require("cohere-ai");
@@ -18,6 +18,49 @@ const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GEMINI_API_KEY)
 const cohere = new cohere_ai_1.CohereClient({
     token: process.env.COHERE_API_KEY,
 });
+// --- [UPDATED] AI-POWERED S.M.A.R.T. GOAL ASSISTANT ---
+const refineGoalWithAI = async (req, res) => {
+    const { goal } = req.body;
+    if (!goal) {
+        res.status(400).json({ message: "A goal is required to refine." });
+        return;
+    }
+    try {
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        // --- START OF PROMPT IMPROVEMENT ---
+        const prompt = `
+      You are a friendly and practical mentor on the MentorMe platform. Your tone should be encouraging, authentic, and realistic, not like a robot or a textbook.
+      A user has shared a goal. Your task is to rephrase it into a S.M.A.R.T. goal framework and return it as a clean JSON object with no extra text or markdown formatting.
+
+      The JSON object must have these keys: "title", "specific", "measurable", "achievable", "relevant", and "timeBound".
+
+      - "title": Create a short, motivating title for the goal.
+      - "specific": Describe a clear and focused first step. What is one concrete action they can take? Avoid jargon.
+      - "measurable": Suggest a simple, tangible way to see progress. Think of it as a small win, for example, "Read one chapter" or "Complete one tutorial".
+      - "achievable": Briefly explain why this is a manageable step. Frame it as something within their control.
+      - "relevant": Connect this smaller goal to their bigger ambition. How does this step help them in the long run?
+      - "timeBound": Suggest a relaxed, low-pressure timeframe. Use phrases like "Over the next few weeks" or "By the end of next month".
+
+      User's Goal: "${goal}"
+
+      Now, generate the JSON object.
+    `;
+        // --- END OF PROMPT IMPROVEMENT ---
+        const result = await model.generateContent(prompt);
+        const aiResponseText = result.response.text();
+        const cleanedJsonString = aiResponseText.replace(/```json|```/g, "").trim();
+        const refinedGoal = JSON.parse(cleanedJsonString);
+        res.status(200).json(refinedGoal);
+    }
+    catch (error) {
+        console.error("--- AI GOAL REFINEMENT ERROR ---", error);
+        res.status(500).json({
+            message: "Error refining the goal with AI.",
+            error: error.message || "An unknown error occurred.",
+        });
+    }
+};
+exports.refineGoalWithAI = refineGoalWithAI;
 // --- HELPER FUNCTION TO GET USER CONTEXT ---
 const getUserContext = async (userId) => {
     try {
@@ -73,7 +116,6 @@ const getUserContext = async (userId) => {
         }
         if (sessions.length > 0) {
             const sessionStrings = sessions.map((s) => {
-                // --- FIX: Added optional chaining (?.) to safely access mentor and mentee properties ---
                 const otherPersonName = s.mentor?.id === userId
                     ? s.mentee?.profile?.name
                     : s.mentor?.profile?.name;
@@ -366,7 +408,6 @@ const getAiMentorMatches = async (req, res) => {
     }
 };
 exports.getAiMentorMatches = getAiMentorMatches;
-// --- [THIS FUNCTION HAS BEEN UPDATED] ---
 const summarizeTranscript = async (req, res) => {
     const userId = (0, getUserId_1.getUserId)(req);
     const { sessionId, transcript } = req.body;
@@ -406,12 +447,9 @@ const summarizeTranscript = async (req, res) => {
       ${transcript}
       ---
     `;
-        // 1. Call the AI model and get the response
         const result = await model.generateContent(prompt);
         const aiResponseText = result.response.text();
-        // 2. Parse the JSON string from the AI into an object
         const insights = JSON.parse(aiResponseText);
-        // 3. Save the structured insights to the database
         const savedInsight = await client_1.default.sessionInsight.upsert({
             where: { sessionId },
             update: {
@@ -438,7 +476,6 @@ const summarizeTranscript = async (req, res) => {
 };
 exports.summarizeTranscript = summarizeTranscript;
 const getIcebreakers = async (req, res) => {
-    // Added the required return type
     const { mentorshipId } = req.params;
     try {
         const mentorship = await client_1.default.mentorshipRequest.findUnique({
@@ -461,11 +498,9 @@ const getIcebreakers = async (req, res) => {
       - Skills: ${menteeProfile.skills.join(", ")}
       - Goals: ${menteeProfile.goals}
     `;
-        // Replaced the incorrect 'openai' variable with the correct 'genAI'
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const result = await model.generateContent(prompt);
         const suggestions = JSON.parse(result.response.text() || "{}");
-        // --- END OF FIX ---
         res.status(200).json(suggestions);
     }
     catch (error) {

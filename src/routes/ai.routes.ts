@@ -10,6 +10,7 @@ import {
   getAiMentorMatches,
   summarizeTranscript,
   getIcebreakers,
+  refineGoalWithAI, // --- [NEW] Import the new controller function ---
 } from "../controllers/ai.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 import { validateRequest } from "../middleware/validateRequest";
@@ -19,6 +20,14 @@ const router = Router();
 
 // Middleware to protect all routes defined below it
 router.use(authMiddleware);
+
+// --- [NEW] AI-Powered S.M.A.R.T. Goal Assistant Route ---
+router.post(
+  "/refine-goal",
+  [body("goal").notEmpty().withMessage("A goal is required to refine.")],
+  validateRequest,
+  refineGoalWithAI
+);
 
 // --- AI-Powered Mentor Matching Route ---
 router.get("/matches", getAiMentorMatches);

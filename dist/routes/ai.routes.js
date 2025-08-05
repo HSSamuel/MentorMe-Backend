@@ -9,6 +9,8 @@ const fileUpload_middleware_1 = require("../middleware/fileUpload.middleware");
 const router = (0, express_1.Router)();
 // Middleware to protect all routes defined below it
 router.use(auth_middleware_1.authMiddleware);
+// --- [NEW] AI-Powered S.M.A.R.T. Goal Assistant Route ---
+router.post("/refine-goal", [(0, express_validator_1.body)("goal").notEmpty().withMessage("A goal is required to refine.")], validateRequest_1.validateRequest, ai_controller_1.refineGoalWithAI);
 // --- AI-Powered Mentor Matching Route ---
 router.get("/matches", ai_controller_1.getAiMentorMatches);
 // --- AI-Powered Session Analysis Route ---
