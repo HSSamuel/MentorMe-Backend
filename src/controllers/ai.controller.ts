@@ -29,7 +29,7 @@ export const refineGoalWithAI = async (
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
     // --- START OF PROMPT IMPROVEMENT ---
     const prompt = `
       You are a friendly and practical mentor on the MentorMe platform. Your tone should be encouraging, authentic, and realistic, not like a robot or a textbook.
@@ -285,7 +285,7 @@ Your original S.M.A.R.T. goal instruction remains: When a user expresses a desir
 
     if (aiProvider === "gemini") {
       const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
+        model: "gemini-1.5-flash-001",
         systemInstruction: systemPrompt,
       });
       const chat = model.startChat({
@@ -370,7 +370,7 @@ export const handleFileAnalysis = async (
       currentConversationId = newConversation.id;
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
 
     const filePart = {
       inlineData: {
@@ -517,7 +517,7 @@ export const summarizeTranscript = async (
       return;
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
     const prompt = `
       You are an AI assistant for a mentorship platform. Analyze the following transcript and provide a structured summary in a clean JSON format.
       The JSON object must have three keys: "summary", "keyTopics", and "actionItems".
@@ -592,7 +592,7 @@ export const getIcebreakers = async (
       - Goals: ${menteeProfile.goals}
     `;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
     const result = await model.generateContent(prompt);
     const suggestions = JSON.parse(result.response.text() || "{}");
 
