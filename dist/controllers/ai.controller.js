@@ -18,7 +18,7 @@ const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GEMINI_API_KEY)
 const cohere = new cohere_ai_1.CohereClient({
     token: process.env.COHERE_API_KEY,
 });
-// --- [UPDATED] AI-POWERED S.M.A.R.T. GOAL ASSISTANT ---
+// --- [UPDATED] AI-POWERED S.M.A.R.T. GOAL ASSISTANT (Switched to Cohere) ---
 const refineGoalWithAI = async (req, res) => {
     const { goal } = req.body;
     if (!goal) {
@@ -26,7 +26,6 @@ const refineGoalWithAI = async (req, res) => {
         return;
     }
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
         // --- START OF PROMPT IMPROVEMENT ---
         const prompt = `
       You are a friendly and practical mentor on the MentorMe platform. Your tone should be encouraging, authentic, and realistic, not like a robot or a textbook.
@@ -46,8 +45,11 @@ const refineGoalWithAI = async (req, res) => {
       Now, generate the JSON object.
     `;
         // --- END OF PROMPT IMPROVEMENT ---
-        const result = await model.generateContent(prompt);
-        const aiResponseText = result.response.text();
+        // Use Cohere's chat endpoint
+        const response = await cohere.chat({
+            message: prompt,
+        });
+        const aiResponseText = response.text;
         const cleanedJsonString = aiResponseText.replace(/```json|```/g, "").trim();
         const refinedGoal = JSON.parse(cleanedJsonString);
         res.status(200).json(refinedGoal);
@@ -241,7 +243,7 @@ Your original S.M.A.R.T. goal instruction remains: When a user expresses a desir
         let aiResponseText;
         if (aiProvider === "gemini") {
             const model = genAI.getGenerativeModel({
-                model: "gemini-1.5-flash-001",
+                model: "gemini-1.5-flash-latest", // <-- FIXED
                 systemInstruction: systemPrompt,
             });
             const chat = model.startChat({
@@ -286,8 +288,9 @@ Your original S.M.A.R.T. goal instruction remains: When a user expresses a desir
         });
     }
 };
+// --- [UPDATED] Default chat handler now uses Cohere ---
 const handleAIChat = async (req, res) => {
-    await chatWithAI(req, res, "gemini");
+    await chatWithAI(req, res, "cohere");
 };
 exports.handleAIChat = handleAIChat;
 const handleCohereChat = async (req, res) => {
@@ -313,7 +316,9 @@ const handleFileAnalysis = async (req, res) => {
             });
             currentConversationId = newConversation.id;
         }
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
+        const model = genAI.getGenerativeModel({
+            model: "gemini-1.5-flash-latest",
+        }); // <-- FIXED
         const filePart = {
             inlineData: {
                 data: req.file.buffer.toString("base64"),
@@ -408,6 +413,7 @@ const getAiMentorMatches = async (req, res) => {
     }
 };
 exports.getAiMentorMatches = getAiMentorMatches;
+// --- [UPDATED] Transcript Summarizer (Switched to Cohere) ---
 const summarizeTranscript = async (req, res) => {
     const userId = (0, getUserId_1.getUserId)(req);
     const { sessionId, transcript } = req.body;
@@ -434,7 +440,6 @@ const summarizeTranscript = async (req, res) => {
                 .json({ message: "You are not authorized to access this session." });
             return;
         }
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
         const prompt = `
       You are an AI assistant for a mentorship platform. Analyze the following transcript and provide a structured summary in a clean JSON format.
       The JSON object must have three keys: "summary", "keyTopics", and "actionItems".
@@ -447,8 +452,11 @@ const summarizeTranscript = async (req, res) => {
       ${transcript}
       ---
     `;
-        const result = await model.generateContent(prompt);
-        const aiResponseText = result.response.text();
+        // Use Cohere's chat endpoint
+        const response = await cohere.chat({
+            message: prompt,
+        });
+        const aiResponseText = response.text;
         const insights = JSON.parse(aiResponseText);
         const savedInsight = await client_1.default.sessionInsight.upsert({
             where: { sessionId },
@@ -475,6 +483,7 @@ const summarizeTranscript = async (req, res) => {
     }
 };
 exports.summarizeTranscript = summarizeTranscript;
+// --- [UPDATED] Icebreaker Generator (Switched to Cohere) ---
 const getIcebreakers = async (req, res) => {
     const { mentorshipId } = req.params;
     try {
@@ -485,7 +494,7 @@ const getIcebreakers = async (req, res) => {
             },
         });
         if (!mentorship?.mentee?.profile) {
-            res.status(404).json({ message: "Mentee profile not found." });
+            res.status(4404).json({ message: "Mentee profile not found." });
             return;
         }
         const menteeProfile = mentorship.mentee.profile;
@@ -498,9 +507,11 @@ const getIcebreakers = async (req, res) => {
       - Skills: ${menteeProfile.skills.join(", ")}
       - Goals: ${menteeProfile.goals}
     `;
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
-        const result = await model.generateContent(prompt);
-        const suggestions = JSON.parse(result.response.text() || "{}");
+        // Use Cohere's chat endpoint
+        const response = await cohere.chat({
+            message: prompt,
+        });
+        const suggestions = JSON.parse(response.text || "{}");
         res.status(200).json(suggestions);
     }
     catch (error) {
