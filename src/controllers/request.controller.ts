@@ -122,7 +122,7 @@ export const createRequest = async (
 
     res.status(201).json(newRequest);
   } catch (error) {
-    console.error("Error creating mentorship request:", error); // Added more specific log
+    console.error("Error creating mentorship request:", error);
     res.status(500).json({ message: "Server error while creating request" });
   }
 };
