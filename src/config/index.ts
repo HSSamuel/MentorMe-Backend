@@ -19,6 +19,17 @@ if (fs.existsSync(configFile)) {
 
 export default {
   get: (key: string): string | undefined => {
-    return process.env[key] || (config as any)[key];
+    const value = process.env[key] || (config as any)[key];
+
+    // --- FIX: Enforce production URL for emails ---
+    // If the system tries to get the FRONTEND_URL and it's missing or set to localhost,
+    // we force it to return the live Netlify URL. This ensures email links work correctly.
+    if (key === "FRONTEND_URL") {
+      if (!value || value.includes("localhost")) {
+        return "https://dsamentor.netlify.app";
+      }
+    }
+
+    return value;
   },
 };
